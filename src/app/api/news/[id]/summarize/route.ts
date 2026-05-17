@@ -1,6 +1,5 @@
-import { isDatabaseAvailable, db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getArticleById } from '@/lib/mock-data'
+import { getCachedArticles } from '@/lib/news-service'
 import ZAI from 'z-ai-web-dev-sdk'
 
 export async function POST(
@@ -10,44 +9,24 @@ export async function POST(
   try {
     const { id } = await params
 
+    // Find article in the live news cache
+    const cachedArticles = getCachedArticles()
+    const article = cachedArticles.find((a) => a.id === id)
+
     let contentToSummarize = ''
     let articleSummaryAr = ''
     let articleSummaryEn = ''
 
-    if (isDatabaseAvailable()) {
-      const article = await db!.article.findUnique({
-        where: { id },
-        include: {
-          source: true,
-        },
-      })
-
-      if (!article) {
-        return NextResponse.json(
-          { error: 'Article not found' },
-          { status: 404 }
-        )
-      }
-
+    if (article) {
       contentToSummarize =
         article.contentEn || article.contentAr || article.summaryEn || article.summaryAr || ''
       articleSummaryAr = article.summaryAr || ''
       articleSummaryEn = article.summaryEn || ''
     } else {
-      // Fallback to mock data
-      const mockArticle = getArticleById(id)
-
-      if (!mockArticle) {
-        return NextResponse.json(
-          { error: 'Article not found' },
-          { status: 404 }
-        )
-      }
-
-      contentToSummarize =
-        mockArticle.contentEn || mockArticle.contentAr || mockArticle.summaryEn || mockArticle.summaryAr || ''
-      articleSummaryAr = mockArticle.summaryAr || ''
-      articleSummaryEn = mockArticle.summaryEn || ''
+      return NextResponse.json(
+        { error: 'Article not found in cache' },
+        { status: 404 }
+      )
     }
 
     if (!contentToSummarize) {
@@ -101,17 +80,6 @@ export async function POST(
     } catch (aiError) {
       console.warn('AI summarization unavailable, using existing summaries:', aiError)
       // Keep the existing article summaries as fallback
-    }
-
-    // Update the article with the generated summaries if db is available
-    if (isDatabaseAvailable()) {
-      await db!.article.update({
-        where: { id },
-        data: {
-          summaryAr,
-          summaryEn,
-        },
-      })
     }
 
     return NextResponse.json({

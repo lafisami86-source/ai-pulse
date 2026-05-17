@@ -140,33 +140,7 @@ const categoryLabels: Record<string, { ar: string; en: string }> = {
   policy: { ar: 'سياسات وتنظيمات', en: 'Policy & Regulation' },
 }
 
-// ---------------------------------------------------------------------------
-// Mock initial comments for demo
-// ---------------------------------------------------------------------------
-
-const mockComments = [
-  {
-    articleId: '__any__',
-    authorName: 'Ahmed Al-Rashid',
-    authorAvatar: '',
-    content: 'This is a fascinating development in the AI space. The implications for healthcare are particularly exciting.',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    articleId: '__any__',
-    authorName: 'سارة المنصوري',
-    authorAvatar: '',
-    content: 'مقال ممتاز! أتمنى أن نرى المزيد من التفاصيل حول التأثير على الصناعة العربية.',
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    articleId: '__any__',
-    authorName: 'Dr. Emily Chen',
-    authorAvatar: '',
-    content: 'As a researcher in this field, I can confirm the significance of these findings. The paper raises important ethical questions.',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-]
+// No mock comments - users add real comments themselves
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -364,35 +338,13 @@ export function ArticlePage() {
   const [submittingComment, setSubmittingComment] = useState(false)
   // Share state
   const [copied, setCopied] = useState(false)
-  // Mock comments seeded flag
-  const [mockSeeded, setMockSeeded] = useState(false)
+  // No mock comments
 
   const articleRef = useRef<HTMLDivElement>(null)
 
   const isAr = language === 'ar'
 
-  // Seed mock comments once per article if none exist
-  useEffect(() => {
-    if (!selectedArticleId || mockSeeded) return
-    const existing = getArticleComments(selectedArticleId)
-    if (existing.length === 0) {
-      mockComments.forEach((mc) => {
-        addComment({
-          articleId: selectedArticleId,
-          authorName: mc.authorName,
-          authorAvatar: mc.authorAvatar,
-          content: mc.content,
-          createdAt: mc.createdAt,
-        })
-      })
-    }
-    setMockSeeded(true)
-  }, [selectedArticleId, mockSeeded, getArticleComments, addComment])
-
-  // Reset mock seeded flag when article changes
-  useEffect(() => {
-    setMockSeeded(false)
-  }, [selectedArticleId])
+  // No mock comment seeding - real users add their own comments
 
   // Fetch article data
   useEffect(() => {

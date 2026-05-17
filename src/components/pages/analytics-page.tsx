@@ -1,18 +1,20 @@
 'use client'
 
-import { useAppStore, useLanguage, useIsRTL } from '@/lib/store'
+import { useLanguage, useIsRTL } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { motion } from 'framer-motion'
 import {
   TrendingUp,
   PieChart as PieChartIcon,
   Building2,
   Cloud,
-  DollarSign,
-  Cpu,
   BarChart3,
+  RefreshCw,
+  Loader2,
+  Newspaper,
 } from 'lucide-react'
 import {
   LineChart,
@@ -22,8 +24,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -31,84 +31,38 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 const CHART_COLORS = ['#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1']
 
-// ---- Mock Data ----
+// Category display names
+const categoryNames: Record<string, { ar: string; en: string }> = {
+  'general-ai': { ar: 'الذكاء الاصطناعي العام', en: 'General AI' },
+  'computer-vision': { ar: 'الرؤية الحاسوبية', en: 'Computer Vision' },
+  'robotics': { ar: 'الروبوتات', en: 'Robotics' },
+  'ai-ethics': { ar: 'أخلاقيات AI', en: 'AI Ethics' },
+  'nlp': { ar: 'معالجة اللغات الطبيعية', en: 'NLP' },
+  'machine-learning': { ar: 'تعلم الآلة', en: 'Machine Learning' },
+  'generative-ai': { ar: 'أدوات وتطبيقات', en: 'Tools & Apps' },
+  'ai-policy': { ar: 'سياسات وتنظيمات', en: 'Policy & Regulation' },
+}
 
-// 1. AI Trends Overview — Line chart, 30 days
-const AI_TRENDS_DATA = Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1,
-  dayLabel: `Day ${i + 1}`,
-  volume: Math.floor(80 + Math.random() * 60 + (i > 20 ? i * 1.5 : 0)),
-  aiNews: Math.floor(50 + Math.random() * 40 + (i > 15 ? i * 1.2 : 0)),
-}))
+interface AnalyticsData {
+  categoryDistribution: Array<{ category: string; count: number }>
+  articlesPerDay: Array<{ date: string; count: number }>
+  topSources: Array<{ id: string; name: string; reliabilityScore: number; logo: string; articleCount: number }>
+  trendingTopics: Array<{ tag: string; count: number }>
+  totalArticles: number
+  period: string
+}
 
-// 2. Category Distribution — Pie/donut chart
-const CATEGORY_DISTRIBUTION = [
-  { name: 'LLMs', nameAr: 'نماذج لغوية', value: 28, color: '#8b5cf6' },
-  { name: 'Computer Vision', nameAr: 'الرؤية الحاسوبية', value: 18, color: '#3b82f6' },
-  { name: 'Robotics', nameAr: 'الروبوتات', value: 14, color: '#06b6d4' },
-  { name: 'Healthcare AI', nameAr: 'AI طبي', value: 12, color: '#10b981' },
-  { name: 'Investment', nameAr: 'استثمار', value: 10, color: '#f59e0b' },
-  { name: 'Ethics & Policy', nameAr: 'أخلاقيات وسياسات', value: 8, color: '#ef4444' },
-  { name: 'Autonomous', nameAr: 'قيادة ذاتية', value: 6, color: '#ec4899' },
-  { name: 'Other', nameAr: 'أخرى', value: 4, color: '#6366f1' },
-]
-
-// 3. Top Sources — Horizontal bar chart
-const TOP_SOURCES = [
-  { name: 'TechCrunch', nameAr: 'تيك كرانش', articles: 156, reliability: 94 },
-  { name: 'The Verge', nameAr: 'ذا فيرج', articles: 132, reliability: 91 },
-  { name: 'ArXiv', nameAr: 'آركايف', articles: 120, reliability: 98 },
-  { name: 'Nature AI', nameAr: 'نيتشر AI', articles: 98, reliability: 97 },
-  { name: 'MIT Tech Review', nameAr: 'مراجعة MIT', articles: 87, reliability: 95 },
-  { name: 'Wired', nameAr: 'وايرد', articles: 76, reliability: 88 },
-  { name: 'VentureBeat', nameAr: 'فنتشر بيت', articles: 65, reliability: 82 },
-  { name: 'AI News', nameAr: 'أخبار AI', articles: 54, reliability: 79 },
-]
-
-// 4. Trending Topics — Word cloud data
-const TRENDING_TOPICS = [
-  { text: 'GPT-5', textAr: 'GPT-5', weight: 100 },
-  { text: 'AGI', textAr: 'AGI', weight: 88 },
-  { text: 'Multimodal', textAr: 'متعدد الوسائط', weight: 82 },
-  { text: 'Open Source AI', textAr: 'AI مفتوح المصدر', weight: 76 },
-  { text: 'AI Safety', textAr: 'أمان AI', weight: 72 },
-  { text: 'Embeddings', textAr: 'التضمينات', weight: 65 },
-  { text: 'Fine-tuning', textAr: 'الضبط الدقيق', weight: 60 },
-  { text: 'RAG', textAr: 'RAG', weight: 58 },
-  { text: 'Agents', textAr: 'الوكلاء', weight: 55 },
-  { text: 'Diffusion', textAr: 'الانتشار', weight: 50 },
-  { text: 'MLOps', textAr: 'MLOps', weight: 45 },
-  { text: 'Vision-Language', textAr: 'رؤية-لغة', weight: 42 },
-  { text: 'Reinforcement Learning', textAr: 'التعلم المعزز', weight: 38 },
-  { text: 'Quantum AI', textAr: 'AI كمي', weight: 35 },
-  { text: 'Edge AI', textAr: 'AI حافّي', weight: 32 },
-  { text: 'Synthetic Data', textAr: 'بيانات اصطناعية', weight: 30 },
-]
-
-// 5. AI Investment Trends — Area chart
-const INVESTMENT_DATA = [
-  { quarter: 'Q1 23', qAr: 'م1 23', northAmerica: 45, europe: 18, asia: 28, other: 5 },
-  { quarter: 'Q2 23', qAr: 'م2 23', northAmerica: 52, europe: 22, asia: 32, other: 7 },
-  { quarter: 'Q3 23', qAr: 'م3 23', northAmerica: 58, europe: 25, asia: 35, other: 9 },
-  { quarter: 'Q4 23', qAr: 'م4 23', northAmerica: 65, europe: 28, asia: 38, other: 11 },
-  { quarter: 'Q1 24', qAr: 'م1 24', northAmerica: 72, europe: 32, asia: 42, other: 14 },
-  { quarter: 'Q2 24', qAr: 'م2 24', northAmerica: 85, europe: 38, asia: 48, other: 18 },
-  { quarter: 'Q3 24', qAr: 'م3 24', northAmerica: 92, europe: 42, asia: 55, other: 22 },
-  { quarter: 'Q4 24', qAr: 'م4 24', northAmerica: 110, europe: 48, asia: 62, other: 28 },
-]
-
-// 6. Model Performance Comparison — Bar chart
-const MODEL_COMPARISON = [
-  { model: 'GPT-5', reasoning: 96, coding: 94, math: 92, writing: 95 },
-  { model: 'Claude 4', reasoning: 94, coding: 96, math: 90, writing: 93 },
-  { model: 'Gemini 2', reasoning: 91, coding: 88, math: 95, writing: 87 },
-  { model: 'Llama 4', reasoning: 85, coding: 82, math: 84, writing: 80 },
-  { model: 'Mistral 3', reasoning: 80, coding: 78, math: 76, writing: 82 },
-]
+interface StatsData {
+  totalArticles: number
+  totalSources: number
+  totalViews: number
+  breakingCount: number
+  categoryCounts: Record<string, number>
+}
 
 const container = {
   hidden: { opacity: 0 },
@@ -157,17 +111,83 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   )
 }
 
+function EmptyChartMessage({ isRTL }: { isRTL: boolean }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center py-8">
+      <Newspaper className="size-10 text-muted-foreground/30 mb-3" />
+      <p className="text-sm text-muted-foreground">
+        {isRTL ? 'في انتظار البيانات — ستظهر الرسوم البيانية عند جلب الأخبار' : 'Waiting for data — charts will appear when news is fetched'}
+      </p>
+    </div>
+  )
+}
+
 export function AnalyticsPage() {
   const language = useLanguage()
   const isRTL = useIsRTL()
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [stats, setStats] = useState<StatsData | null>(null)
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800)
-    return () => clearTimeout(timer)
+  const fetchData = useCallback(async () => {
+    try {
+      const [analyticsRes, statsRes] = await Promise.allSettled([
+        fetch('/api/analytics/trends'),
+        fetch('/api/stats'),
+      ])
+
+      if (analyticsRes.status === 'fulfilled' && analyticsRes.value.ok) {
+        const data = await analyticsRes.value.json()
+        setAnalytics(data)
+      }
+
+      if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+        const data = await statsRes.value.json()
+        setStats(data)
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }, [])
 
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true)
+    fetchData()
+  }, [fetchData])
+
+  // Prepare real data for charts
+  const categoryDistribution = analytics?.categoryDistribution || []
+
+  const pieChartData = categoryDistribution.map((cat, i) => ({
+    name: categoryNames[cat.category]?.en || cat.category,
+    nameAr: categoryNames[cat.category]?.ar || cat.category,
+    value: cat.count,
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  }))
+
+  const articlesPerDayData = (analytics?.articlesPerDay || []).map(d => ({
+    ...d,
+    day: d.date.split('T')[0]?.slice(5) || d.date, // MM-DD format
+  }))
+
+  const topSourcesData = (analytics?.topSources || []).slice(0, 8)
+
+  const trendingTopicsData = (analytics?.trendingTopics || []).slice(0, 16)
+
   if (loading) return <AnalyticsSkeleton />
+
+  // Quick stats from real data
+  const totalArticles = stats?.totalArticles || analytics?.totalArticles || 0
+  const totalSources = stats?.totalSources || topSourcesData.length
+  const hasData = totalArticles > 0
 
   return (
     <motion.div
@@ -178,35 +198,49 @@ export function AnalyticsPage() {
     >
       {/* Page Header */}
       <motion.div variants={item} className="space-y-1">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center size-12 rounded-xl bg-gradient-to-br from-ai-blue to-ai-cyan text-white shadow-lg">
-            <BarChart3 className="size-6" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center size-12 rounded-xl bg-gradient-to-br from-ai-blue to-ai-cyan text-white shadow-lg">
+              <BarChart3 className="size-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold">
+                {isRTL ? 'التحليلات والاتجاهات' : 'Analytics & Trends'}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {isRTL
+                  ? 'رؤى معمقة حول مشهد الذكاء الاصطناعي العالمي'
+                  : 'Deep insights into the global AI landscape'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold">
-              {isRTL ? 'التحليلات والاتجاهات' : 'Analytics & Trends'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {isRTL
-                ? 'رؤى معمقة حول مشهد الذكاء الاصطناعي العالمي'
-                : 'Deep insights into the global AI landscape'}
-            </p>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {isRTL ? 'تحديث' : 'Refresh'}
+          </Button>
         </div>
       </motion.div>
 
-      {/* Quick Stats Row */}
+      {/* Quick Stats Row - REAL DATA */}
       <motion.div variants={item}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { labelAr: 'إجمالي المقالات', labelEn: 'Total Articles', value: '12,847', icon: <TrendingUp className="size-4" />, color: 'text-ai-purple' },
-            { labelAr: 'مصادر نشطة', labelEn: 'Active Sources', value: '523', icon: <Building2 className="size-4" />, color: 'text-ai-blue' },
-            { labelAr: 'اتجاه صاعد', labelEn: 'Trending Up', value: '+34%', icon: <TrendingUp className="size-4" />, color: 'text-emerald-500' },
-            { labelAr: 'استثمار AI عالمي', labelEn: 'Global AI Investment', value: '$248B', icon: <DollarSign className="size-4" />, color: 'text-ai-cyan' },
+            { labelAr: 'إجمالي المقالات', labelEn: 'Total Articles', value: String(totalArticles), icon: <TrendingUp className="size-4" />, color: 'text-ai-purple' },
+            { labelAr: 'مصادر نشطة', labelEn: 'Active Sources', value: String(totalSources), icon: <Building2 className="size-4" />, color: 'text-ai-blue' },
+            { labelAr: 'فئات مغطاة', labelEn: 'Categories Covered', value: String(categoryDistribution.length), icon: <PieChartIcon className="size-4" />, color: 'text-emerald-500' },
+            { labelAr: 'مواضيع رائجة', labelEn: 'Trending Topics', value: String(trendingTopicsData.length), icon: <Cloud className="size-4" />, color: 'text-ai-cyan' },
           ].map((stat, i) => (
             <Card key={i} className="ai-card">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={`${stat.color}`}>{stat.icon}</div>
+                <div className={`${stat.color}`}>
+                  {refreshing ? <Loader2 className="size-4 animate-spin" /> : stat.icon}
+                </div>
                 <div>
                   <div className="text-xl font-bold">{stat.value}</div>
                   <div className="text-xs text-muted-foreground">
@@ -219,64 +253,59 @@ export function AnalyticsPage() {
         </div>
       </motion.div>
 
-      {/* Row 1: AI Trends Overview + Category Distribution */}
+      {/* Row 1: Articles Per Day + Category Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* AI Trends Overview — Line Chart */}
+        {/* Articles Per Day — Line Chart */}
         <motion.div variants={item}>
           <Card className="ai-card h-full">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <TrendingUp className="size-5 text-ai-purple" />
-                {isRTL ? 'نظرة عامة على اتجاهات AI' : 'AI Trends Overview'}
+                {isRTL ? 'المقالات حسب اليوم' : 'Articles Per Day'}
               </CardTitle>
               <CardDescription>
-                {isRTL ? 'حجم أخبار AI خلال آخر 30 يوماً' : 'AI news volume over the last 30 days'}
+                {isRTL ? 'عدد المقالات المتاحة لكل يوم' : 'Number of available articles per day'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={AI_TRENDS_DATA}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      axisLine={{ stroke: 'var(--border)' }}
-                      tickLine={false}
-                      interval={4}
-                    />
-                    <YAxis
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={35}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend
-                      wrapperStyle={{ fontSize: 12 }}
-                      iconType="circle"
-                      iconSize={8}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="volume"
-                      name={isRTL ? 'إجمالي الأخبار' : 'Total News'}
-                      stroke="#8b5cf6"
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="aiNews"
-                      name={isRTL ? 'أخبار AI' : 'AI News'}
-                      stroke="#06b6d4"
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                {articlesPerDayData.length === 0 || articlesPerDayData.every(d => d.count === 0) ? (
+                  <EmptyChartMessage isRTL={isRTL} />
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={articlesPerDayData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                        axisLine={{ stroke: 'var(--border)' }}
+                        tickLine={false}
+                        interval={4}
+                      />
+                      <YAxis
+                        tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={35}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ fontSize: 12 }}
+                        iconType="circle"
+                        iconSize={8}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="count"
+                        name={isRTL ? 'المقالات' : 'Articles'}
+                        stroke="#8b5cf6"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -296,45 +325,49 @@ export function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="h-72 flex items-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={CATEGORY_DISTRIBUTION}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={3}
-                      dataKey="value"
-                      nameKey={isRTL ? 'nameAr' : 'name'}
-                      stroke="none"
-                    >
-                      {CATEGORY_DISTRIBUTION.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--card)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      }}
-                      formatter={(value: number, name: string) => [`${value}%`, name]}
-                    />
-                    <Legend
-                      layout="vertical"
-                      align={isRTL ? 'right' : 'right'}
-                      verticalAlign="middle"
-                      iconType="circle"
-                      iconSize={8}
-                      wrapperStyle={{ fontSize: 11, paddingLeft: '8px' }}
-                      formatter={(value: string) => (
-                        <span className="text-muted-foreground text-xs">{value}</span>
-                      )}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                {pieChartData.length === 0 ? (
+                  <EmptyChartMessage isRTL={isRTL} />
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={90}
+                        paddingAngle={3}
+                        dataKey="value"
+                        nameKey={isRTL ? 'nameAr' : 'name'}
+                        stroke="none"
+                      >
+                        {pieChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--card)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        }}
+                        formatter={(value: number, name: string) => [`${value}`, name]}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align={isRTL ? 'right' : 'right'}
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ fontSize: 11, paddingLeft: '8px' }}
+                        formatter={(value: string) => (
+                          <span className="text-muted-foreground text-xs">{value}</span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -357,49 +390,53 @@ export function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={TOP_SOURCES}
-                    layout="vertical"
-                    margin={{ left: 10, right: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey={isRTL ? 'nameAr' : 'name'}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={80}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend
-                      wrapperStyle={{ fontSize: 12 }}
-                      iconType="circle"
-                      iconSize={8}
-                    />
-                    <Bar
-                      dataKey="articles"
-                      name={isRTL ? 'المقالات' : 'Articles'}
-                      fill="#8b5cf6"
-                      radius={[0, 4, 4, 0]}
-                      maxBarSize={16}
-                    />
-                    <Bar
-                      dataKey="reliability"
-                      name={isRTL ? 'الموثوقية' : 'Reliability'}
-                      fill="#06b6d4"
-                      radius={[0, 4, 4, 0]}
-                      maxBarSize={16}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                {topSourcesData.length === 0 ? (
+                  <EmptyChartMessage isRTL={isRTL} />
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={topSourcesData}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={100}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ fontSize: 12 }}
+                        iconType="circle"
+                        iconSize={8}
+                      />
+                      <Bar
+                        dataKey="articleCount"
+                        name={isRTL ? 'المقالات' : 'Articles'}
+                        fill="#8b5cf6"
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={16}
+                      />
+                      <Bar
+                        dataKey="reliabilityScore"
+                        name={isRTL ? 'الموثوقية' : 'Reliability'}
+                        fill="#06b6d4"
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={16}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -414,206 +451,70 @@ export function AnalyticsPage() {
                 {isRTL ? 'المواضيع الرائجة' : 'Trending Topics'}
               </CardTitle>
               <CardDescription>
-                {isRTL ? 'أكثر المواضيع تداولاً هذا الأسبوع' : 'Most discussed topics this week'}
+                {isRTL ? 'أكثر المواضيع تداولاً في الأخبار الحالية' : 'Most discussed topics in current news'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-72 flex flex-wrap items-center justify-center gap-2 p-2">
-                {TRENDING_TOPICS.map((topic, i) => {
-                  const minSize = 12
-                  const maxSize = 32
-                  const size = minSize + (topic.weight / 100) * (maxSize - minSize)
-                  const color = CHART_COLORS[i % CHART_COLORS.length]
-                  return (
-                    <motion.span
-                      key={topic.text}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3, delay: i * 0.03 }}
-                      whileHover={{ scale: 1.15 }}
-                      className="cursor-default font-semibold transition-colors hover:underline"
-                      style={{
-                        fontSize: `${size}px`,
-                        color,
-                        lineHeight: 1.3,
-                      }}
-                    >
-                      {isRTL ? topic.textAr : topic.text}
-                    </motion.span>
-                  )
-                })}
+              <div className="h-72">
+                {trendingTopicsData.length === 0 ? (
+                  <EmptyChartMessage isRTL={isRTL} />
+                ) : (
+                  <div className="h-full flex flex-wrap items-center justify-center gap-2 p-2">
+                    {trendingTopicsData.map((topic, i) => {
+                      const maxCount = trendingTopicsData[0]?.count || 1
+                      const weight = (topic.count / maxCount) * 100
+                      const minSize = 12
+                      const maxSize = 32
+                      const size = minSize + (weight / 100) * (maxSize - minSize)
+                      const color = CHART_COLORS[i % CHART_COLORS.length]
+                      return (
+                        <motion.span
+                          key={topic.tag}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: i * 0.03 }}
+                          whileHover={{ scale: 1.15 }}
+                          className="cursor-default font-semibold transition-colors hover:underline"
+                          style={{
+                            fontSize: `${size}px`,
+                            color,
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {topic.tag}
+                        </motion.span>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Row 3: AI Investment Trends — Full Width Area Chart */}
-      <motion.div variants={item}>
-        <Card className="ai-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <DollarSign className="size-5 text-ai-blue" />
-              {isRTL ? 'اتجاهات الاستثمار في AI' : 'AI Investment Trends'}
-            </CardTitle>
-            <CardDescription>
-              {isRTL
-                ? 'الاستثمار في الذكاء الاصطناعي حسب المنطقة (بالمليارات دولار)'
-                : 'AI investment by region (in billions USD)'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={INVESTMENT_DATA}>
-                  <defs>
-                    <linearGradient id="colorNA" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorEU" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorAS" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorOT" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis
-                    dataKey={isRTL ? 'qAr' : 'quarter'}
-                    tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                    axisLine={{ stroke: 'var(--border)' }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={35}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    wrapperStyle={{ fontSize: 12 }}
-                    iconType="circle"
-                    iconSize={8}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="northAmerica"
-                    name={isRTL ? 'أمريكا الشمالية' : 'North America'}
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    fill="url(#colorNA)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="europe"
-                    name={isRTL ? 'أوروبا' : 'Europe'}
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    fill="url(#colorEU)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="asia"
-                    name={isRTL ? 'آسيا' : 'Asia'}
-                    stroke="#06b6d4"
-                    strokeWidth={2}
-                    fill="url(#colorAS)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="other"
-                    name={isRTL ? 'أخرى' : 'Other'}
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    fill="url(#colorOT)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Row 4: Model Performance Comparison — Grouped Bar Chart */}
-      <motion.div variants={item}>
-        <Card className="ai-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Cpu className="size-5 text-ai-cyan" />
-              {isRTL ? 'مقارنة أداء النماذج' : 'Model Performance Comparison'}
-            </CardTitle>
-            <CardDescription>
-              {isRTL
-                ? 'مقارنة نتائج نماذج LLM الرئيسية في معايير مختلفة'
-                : 'Comparing leading LLM benchmarks across different criteria'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={MODEL_COMPARISON} barCategoryGap="15%" barGap={3}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis
-                    dataKey="model"
-                    tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                    axisLine={{ stroke: 'var(--border)' }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
-                    domain={[60, 100]}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    wrapperStyle={{ fontSize: 12 }}
-                    iconType="circle"
-                    iconSize={8}
-                  />
-                  <Bar
-                    dataKey="reasoning"
-                    name={isRTL ? 'الاستدلال' : 'Reasoning'}
-                    fill="#8b5cf6"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={20}
-                  />
-                  <Bar
-                    dataKey="coding"
-                    name={isRTL ? 'البرمجة' : 'Coding'}
-                    fill="#3b82f6"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={20}
-                  />
-                  <Bar
-                    dataKey="math"
-                    name={isRTL ? 'الرياضيات' : 'Math'}
-                    fill="#06b6d4"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={20}
-                  />
-                  <Bar
-                    dataKey="writing"
-                    name={isRTL ? 'الكتابة' : 'Writing'}
-                    fill="#10b981"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={20}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+      {/* No Data Message */}
+      {!hasData && (
+        <motion.div variants={item}>
+          <Card className="ai-card">
+            <CardContent className="p-8 text-center">
+              <Newspaper className="size-12 text-muted-foreground/30 mx-auto mb-4" />
+              <h3 className="text-lg font-bold mb-2">
+                {isRTL ? 'لا توجد بيانات متاحة حالياً' : 'No data available yet'}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {isRTL
+                  ? 'يتم جلب الأخبار تلقائياً كل 15 دقيقة. اضغط على زر التحديث لجلب البيانات الآن.'
+                  : 'News is fetched automatically every 15 minutes. Click refresh to fetch data now.'}
+              </p>
+              <Button onClick={handleRefresh} disabled={refreshing} className="btn-ai-gradient gap-2">
+                <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {isRTL ? 'تحديث الآن' : 'Refresh Now'}
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </motion.div>
   )
 }
