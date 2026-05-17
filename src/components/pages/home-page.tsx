@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain,
@@ -23,6 +23,13 @@ import {
   ChevronDown,
   Cpu,
   Image,
+  Bookmark,
+  BookmarkCheck,
+  Mail,
+  Check,
+  CheckCircle2,
+  ArrowUp,
+  Send,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -142,6 +149,53 @@ function getCategoryBySlug(slug: string): CategoryDef | undefined {
 }
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────
+
+/** Pull-to-Refresh Indicator */
+function PullToRefreshIndicator({ language }: { language: 'ar' | 'en' }) {
+  const isRTL = language === 'ar'
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY
+    let hideTimeout: ReturnType<typeof setTimeout>
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      // Show indicator when user is at the very top
+      if (currentScrollY <= 0 && lastScrollY > 0) {
+        setVisible(true)
+        clearTimeout(hideTimeout)
+        hideTimeout = setTimeout(() => setVisible(false), 1500)
+      }
+      lastScrollY = currentScrollY
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      clearTimeout(hideTimeout)
+    }
+  }, [])
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+          className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-2 pointer-events-none"
+        >
+          <div className="flex items-center gap-2 px-4 py-2 rounded-b-xl bg-primary text-primary-foreground shadow-lg text-sm font-medium">
+            <CheckCircle2 className="size-4" />
+            {isRTL ? 'محدّث' : 'Updated'}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 /** Breaking News Ticker */
 function BreakingNewsTicker({ language }: { language: 'ar' | 'en' }) {
@@ -411,6 +465,55 @@ function CategoriesGrid({ language, onCategoryClick }: { language: 'ar' | 'en'; 
   )
 }
 
+/** Bookmark Button for Cards */
+function BookmarkButton({ articleId }: { articleId: string }) {
+  const { toggleBookmark, isBookmarked } = useAppStore()
+  const bookmarked = isBookmarked(articleId)
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      toggleBookmark(articleId)
+    },
+    [articleId, toggleBookmark]
+  )
+
+  return (
+    <motion.button
+      onClick={handleClick}
+      className="relative z-10 flex items-center justify-center size-8 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background shadow-sm border border-border/50 transition-colors"
+      whileTap={{ scale: 0.8 }}
+      whileHover={{ scale: 1.1 }}
+      aria-label={bookmarked ? 'Remove bookmark' : 'Add bookmark'}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {bookmarked ? (
+          <motion.div
+            key="bookmarked"
+            initial={{ scale: 0, rotate: -30 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0, rotate: 30 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+          >
+            <BookmarkCheck className="size-4 text-ai-purple" />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="not-bookmarked"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+          >
+            <Bookmark className="size-4 text-muted-foreground" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  )
+}
+
 /** Trending Article Card */
 function TrendingArticleCard({ article, language, index }: { article: Article; language: 'ar' | 'en'; index: number }) {
   const isRTL = language === 'ar'
@@ -456,6 +559,10 @@ function TrendingArticleCard({ article, language, index }: { article: Article; l
               {isRTL ? 'عاجل' : 'LIVE'}
             </Badge>
           )}
+          {/* Bookmark button */}
+          <div className="absolute top-3 end-3">
+            {!article.isBreaking && <BookmarkButton articleId={article.id} />}
+          </div>
           {/* Trending rank */}
           <div className="absolute bottom-2 end-3 flex items-center gap-1 text-xs text-muted-foreground/80 ai-glass rounded-md px-2 py-0.5">
             <Flame className="size-3 text-orange-400" />
@@ -564,6 +671,208 @@ function TrendingToday({ language }: { language: 'ar' | 'en' }) {
   )
 }
 
+/** Newsletter Subscription Section */
+function NewsletterSection({ language }: { language: 'ar' | 'en' }) {
+  const isRTL = language === 'ar'
+  const { newsletterSubscribed, setNewsletterSubscribed } = useAppStore()
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!email.trim()) {
+        setError(isRTL ? 'يرجى إدخال البريد الإلكتروني' : 'Please enter your email')
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setError(isRTL ? 'بريد إلكتروني غير صالح' : 'Invalid email address')
+        return
+      }
+      setError('')
+      setSubmitting(true)
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      setNewsletterSubscribed(true)
+      setSubmitting(false)
+    },
+    [email, isRTL, setNewsletterSubscribed]
+  )
+
+  return (
+    <section className="container mx-auto px-4 py-12 md:py-16">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: '-50px' }}
+        transition={{ duration: 0.6 }}
+      >
+        <div className="relative overflow-hidden rounded-2xl md:rounded-3xl">
+          {/* Gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-ai-purple via-ai-blue to-ai-cyan opacity-95" />
+
+          {/* Decorative elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <motion.div
+              className="absolute -top-20 -start-20 w-72 h-72 rounded-full bg-white/10 blur-3xl"
+              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="absolute -bottom-16 -end-16 w-56 h-56 rounded-full bg-white/10 blur-2xl"
+              animate={{ scale: [1.1, 1, 1.1], opacity: [0.2, 0.4, 0.2] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-white/5 blur-3xl"
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            {/* Dot pattern */}
+            <div
+              className="absolute inset-0 opacity-10"
+              style={{
+                backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+                backgroundSize: '24px 24px',
+              }}
+            />
+          </div>
+
+          {/* Content */}
+          <div className="relative z-10 px-6 py-10 md:px-12 md:py-14 lg:px-20 lg:py-16">
+            <AnimatePresence mode="wait">
+              {newsletterSubscribed ? (
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  className="text-center space-y-4"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.1 }}
+                    className="inline-flex items-center justify-center size-16 rounded-full bg-white/20 backdrop-blur-sm mx-auto"
+                  >
+                    <CheckCircle2 className="size-8 text-white" />
+                  </motion.div>
+                  <h3 className="text-2xl md:text-3xl font-bold text-white">
+                    {isRTL ? 'شكراً لاشتراكك!' : 'Thank you for subscribing!'}
+                  </h3>
+                  <p className="text-white/80 max-w-md mx-auto">
+                    {isRTL
+                      ? 'ستصلك أحدث أخبار الذكاء الاصطناعي مباشرة إلى بريدك الإلكتروني'
+                      : "You'll receive the latest AI news directly in your inbox"}
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="form"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col lg:flex-row items-center gap-8 lg:gap-12"
+                >
+                  {/* Left: Text content */}
+                  <div className="flex-1 text-center lg:text-start space-y-4">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-white text-xs font-medium"
+                    >
+                      <Mail className="size-3.5" />
+                      {isRTL ? 'النشرة البريدية' : 'Newsletter'}
+                    </motion.div>
+                    <motion.h3
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight"
+                    >
+                      {isRTL
+                        ? 'ابقَ على اطلاع بأحدث أخبار AI'
+                        : 'Stay Updated with the Latest AI News'}
+                    </motion.h3>
+                    <motion.p
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className="text-white/75 max-w-lg text-sm md:text-base leading-relaxed"
+                    >
+                      {isRTL
+                        ? 'اشترك في نشرتنا البريدية الأسبوعية واحصل على ملخص أهم أخبار وتطورات الذكاء الاصطناعي مباشرة في بريدك الإلكتروني'
+                        : 'Subscribe to our weekly newsletter and get a curated summary of the most important AI news and developments delivered straight to your inbox'}
+                    </motion.p>
+                  </div>
+
+                  {/* Right: Email form */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="w-full lg:w-auto lg:min-w-[380px]"
+                  >
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 relative">
+                          <Mail className="absolute start-3.5 top-1/2 -translate-y-1/2 size-4 text-white/50" />
+                          <Input
+                            value={email}
+                            onChange={(e) => {
+                              setEmail(e.target.value)
+                              setError('')
+                            }}
+                            placeholder={isRTL ? 'أدخل بريدك الإلكتروني' : 'Enter your email address'}
+                            className="h-12 ps-10 pe-4 bg-white/15 backdrop-blur-sm border-white/20 text-white placeholder:text-white/50 focus:border-white/50 focus:ring-white/25 rounded-xl"
+                            dir={isRTL ? 'rtl' : 'ltr'}
+                            type="email"
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          disabled={submitting}
+                          className="h-12 px-6 bg-white text-ai-purple hover:bg-white/90 font-semibold rounded-xl gap-2 shadow-lg shadow-black/20 shrink-0"
+                        >
+                          {submitting ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Send className="size-4" />
+                          )}
+                          {submitting
+                            ? isRTL ? 'جارٍ الاشتراك...' : 'Subscribing...'
+                            : isRTL ? 'اشترك الآن' : 'Subscribe'}
+                        </Button>
+                      </div>
+                      {error && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-sm text-red-200"
+                        >
+                          {error}
+                        </motion.p>
+                      )}
+                      <p className="text-xs text-white/50 text-center lg:text-start">
+                        {isRTL
+                          ? 'لا نرسل رسائل مزعجة. إلغاء الاشتراك في أي وقت.'
+                          : 'No spam, ever. Unsubscribe at any time.'}
+                      </p>
+                    </form>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  )
+}
+
 /** Latest News Article Card */
 function LatestArticleCard({ article, language }: { article: Article; language: 'ar' | 'en' }) {
   const isRTL = language === 'ar'
@@ -582,7 +891,7 @@ function LatestArticleCard({ article, language }: { article: Article; language: 
         onClick={() => selectArticle(article.id)}
       >
         <CardContent className="p-4 sm:p-5 space-y-3">
-          {/* Category + Breaking + Time */}
+          {/* Category + Breaking + Bookmark + Time */}
           <div className="flex items-center gap-2 flex-wrap">
             {category && (
               <Badge
@@ -601,6 +910,7 @@ function LatestArticleCard({ article, language }: { article: Article; language: 
               <Clock className="size-3" />
               {timeAgo(article.publishedAt, isRTL)}
             </span>
+            <BookmarkButton articleId={article.id} />
           </div>
 
           {/* Title */}
@@ -660,7 +970,7 @@ function LoadingSkeletonGrid() {
   )
 }
 
-/** Latest News Section with Category Tabs */
+/** Latest News Section with Category Tabs + Infinite Scroll */
 function LatestNews({ language, initialCategory }: { language: 'ar' | 'en'; initialCategory?: string }) {
   const isRTL = language === 'ar'
   const [activeCategory, setActiveCategory] = useState(initialCategory || 'all')
@@ -670,6 +980,10 @@ function LatestNews({ language, initialCategory }: { language: 'ar' | 'en'; init
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
+
+  // Infinite scroll sentinel ref
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const [isFetching, setIsFetching] = useState(false)
 
   const fetchNews = useCallback(async (cat: string, p: number, append = false) => {
     try {
@@ -695,6 +1009,7 @@ function LatestNews({ language, initialCategory }: { language: 'ar' | 'en'; init
     } finally {
       setLoading(false)
       setLoadingMore(false)
+      setIsFetching(false)
     }
   }, [language])
 
@@ -710,13 +1025,36 @@ function LatestNews({ language, initialCategory }: { language: 'ar' | 'en'; init
     }
   }, [initialCategory, activeCategory])
 
-  const handleLoadMore = () => {
-    const nextPage = page + 1
-    setPage(nextPage)
-    fetchNews(activeCategory, nextPage, true)
-  }
-
   const hasMore = page < totalPages
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel || !hasMore || loading || loadingMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry.isIntersecting && hasMore && !loadingMore && !isFetching) {
+          setIsFetching(true)
+          const nextPage = page + 1
+          setPage(nextPage)
+          fetchNews(activeCategory, nextPage, true)
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px',
+        threshold: 0,
+      }
+    )
+
+    observer.observe(sentinel)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [hasMore, loading, loadingMore, page, activeCategory, fetchNews, isFetching])
 
   const tabItems = [
     { value: 'all', labelAr: 'الكل', labelEn: 'All' },
@@ -780,26 +1118,29 @@ function LatestNews({ language, initialCategory }: { language: 'ar' | 'en'; init
                 </AnimatePresence>
               </div>
 
-              {/* Load More */}
-              {hasMore && (
-                <div className="flex justify-center mt-8">
-                  <Button
-                    variant="outline"
-                    onClick={handleLoadMore}
-                    disabled={loadingMore}
-                    className="gap-2 min-w-[160px]"
+              {/* Infinite scroll sentinel & status */}
+              <div ref={sentinelRef} className="flex justify-center mt-8 min-h-[48px] items-center">
+                {loadingMore && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
                   >
-                    {loadingMore ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <ChevronDown className="size-4" />
-                    )}
-                    {loadingMore
-                      ? isRTL ? 'جارٍ التحميل...' : 'Loading...'
-                      : isRTL ? 'تحميل المزيد' : 'Load More'}
-                  </Button>
-                </div>
-              )}
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                    {isRTL ? 'جارٍ تحميل المزيد...' : 'Loading more articles...'}
+                  </motion.div>
+                )}
+                {!hasMore && articles.length > 0 && !loadingMore && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-sm text-muted-foreground flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="size-4 text-muted-foreground/50" />
+                    {isRTL ? 'لا مزيد من المقالات' : 'No more articles'}
+                  </motion.p>
+                )}
+              </div>
             </>
           )}
         </TabsContent>
@@ -831,6 +1172,9 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen">
+      {/* Pull-to-Refresh Indicator */}
+      <PullToRefreshIndicator language={language} />
+
       {/* 1. Breaking News Ticker */}
       <BreakingNewsTicker language={language} />
 
@@ -843,12 +1187,15 @@ export function HomePage() {
       {/* 4. Trending Today */}
       <TrendingToday language={language} />
 
+      {/* 5. Newsletter Subscription Section */}
+      <NewsletterSection language={language} />
+
       {/* Section Divider */}
       <div className="container mx-auto px-4">
         <div className="ai-divider-gradient" />
       </div>
 
-      {/* 5. Latest News */}
+      {/* 6. Latest News */}
       <div id="latest-news">
         <LatestNews language={language} initialCategory={selectedCategory} />
       </div>

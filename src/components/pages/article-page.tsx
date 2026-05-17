@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore, useLanguage, useIsRTL } from '@/lib/store'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
   Eye,
@@ -21,6 +21,17 @@ import {
   BookOpen,
   Loader2,
   Zap,
+  MessageSquare,
+  ThumbsUp,
+  Send,
+  X,
+  BookOpenCheck,
+  Copy,
+  Twitter,
+  Linkedin,
+  MessageCircle,
+  Quote,
+  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,6 +39,19 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -117,6 +141,34 @@ const categoryLabels: Record<string, { ar: string; en: string }> = {
 }
 
 // ---------------------------------------------------------------------------
+// Mock initial comments for demo
+// ---------------------------------------------------------------------------
+
+const mockComments = [
+  {
+    articleId: '__any__',
+    authorName: 'Ahmed Al-Rashid',
+    authorAvatar: '',
+    content: 'This is a fascinating development in the AI space. The implications for healthcare are particularly exciting.',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    articleId: '__any__',
+    authorName: 'سارة المنصوري',
+    authorAvatar: '',
+    content: 'مقال ممتاز! أتمنى أن نرى المزيد من التفاصيل حول التأثير على الصناعة العربية.',
+    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+  },
+  {
+    articleId: '__any__',
+    authorName: 'Dr. Emily Chen',
+    authorAvatar: '',
+    content: 'As a researcher in this field, I can confirm the significance of these findings. The paper raises important ethical questions.',
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+  },
+]
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -183,11 +235,57 @@ function parseTags(tagsStr: string): string[] {
 function getCategoryLabel(slug: string, isAr: boolean): string {
   const cat = categoryLabels[slug]
   if (cat) return isAr ? cat.ar : cat.en
-  // Fallback: convert slug to title
   return slug
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+// ---------------------------------------------------------------------------
+// ReadingProgressBar — separate component
+// ---------------------------------------------------------------------------
+
+function ReadingProgressBar() {
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    function handleScroll() {
+      const scrollTop = window.scrollY
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight
+      if (docHeight > 0) {
+        setProgress(Math.min((scrollTop / docHeight) * 100, 100))
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-[100] h-1 bg-transparent">
+      <motion.div
+        className="h-full"
+        style={{
+          width: `${progress}%`,
+          background: 'linear-gradient(90deg, #8b5cf6, #3b82f6, #06b6d4)',
+        }}
+        initial={{ width: 0 }}
+        transition={{ duration: 0.1, ease: 'linear' }}
+      />
+      {/* Glow effect at the leading edge */}
+      {progress > 0 && progress < 100 && (
+        <div
+          className="absolute top-0 h-1 w-6 blur-sm"
+          style={{
+            left: `${progress}%`,
+            background: 'linear-gradient(90deg, #3b82f6, #06b6d4)',
+            transform: 'translateX(-100%)',
+          }}
+        />
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +336,21 @@ function ArticleSkeleton() {
 export function ArticlePage() {
   const language = useLanguage()
   const isRTL = useIsRTL()
-  const { selectedArticleId, selectArticle, navigate } = useAppStore()
+  const {
+    selectedArticleId,
+    selectArticle,
+    navigate,
+    toggleBookmark,
+    isBookmarked,
+    readingMode,
+    setReadingMode,
+    fontSize,
+    setFontSize,
+    addComment,
+    toggleCommentLike,
+    getArticleComments,
+    comments,
+  } = useAppStore()
 
   const [article, setArticle] = useState<ArticleData | null>(null)
   const [relatedArticles, setRelatedArticles] = useState<RelatedArticle[]>([])
@@ -246,9 +358,41 @@ export function ArticlePage() {
   const [relatedLoading, setRelatedLoading] = useState(true)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [summarizing, setSummarizing] = useState(false)
-  const [bookmarked, setBookmarked] = useState(false)
+  // Comment form state
+  const [commentAuthor, setCommentAuthor] = useState('')
+  const [commentContent, setCommentContent] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  // Share state
+  const [copied, setCopied] = useState(false)
+  // Mock comments seeded flag
+  const [mockSeeded, setMockSeeded] = useState(false)
+
+  const articleRef = useRef<HTMLDivElement>(null)
 
   const isAr = language === 'ar'
+
+  // Seed mock comments once per article if none exist
+  useEffect(() => {
+    if (!selectedArticleId || mockSeeded) return
+    const existing = getArticleComments(selectedArticleId)
+    if (existing.length === 0) {
+      mockComments.forEach((mc) => {
+        addComment({
+          articleId: selectedArticleId,
+          authorName: mc.authorName,
+          authorAvatar: mc.authorAvatar,
+          content: mc.content,
+          createdAt: mc.createdAt,
+        })
+      })
+    }
+    setMockSeeded(true)
+  }, [selectedArticleId, mockSeeded, getArticleComments, addComment])
+
+  // Reset mock seeded flag when article changes
+  useEffect(() => {
+    setMockSeeded(false)
+  }, [selectedArticleId])
 
   // Fetch article data
   useEffect(() => {
@@ -263,7 +407,6 @@ export function ArticlePage() {
       .then((data) => {
         const art = data.article || data
         setArticle(art)
-        // Set AI summary from article data
         const summaryText = isAr ? (art.summaryAr || art.summary) : (art.summaryEn || art.summary)
         setAiSummary(summaryText || null)
       })
@@ -281,7 +424,6 @@ export function ArticlePage() {
     fetch(`/api/news?category=${article.category}&lang=${language}&page=1`)
       .then((res) => res.json())
       .then((data) => {
-        // Filter out current article from related
         const filtered = (data.articles || []).filter(
           (a: RelatedArticle) => a.id !== article.id
         )
@@ -335,34 +477,93 @@ export function ArticlePage() {
     }
   }, [article, isAr])
 
-  const handleBookmark = useCallback(() => {
-    setBookmarked((prev) => !prev)
+  const handleBookmarkToggle = useCallback(() => {
+    if (!selectedArticleId) return
+    toggleBookmark(selectedArticleId)
+    const nowBookmarked = !isBookmarked(selectedArticleId)
     toast.success(
-      bookmarked
-        ? isAr ? 'تم إزالة الحفظ' : 'Bookmark removed'
-        : isAr ? 'تم حفظ المقال' : 'Article bookmarked'
+      nowBookmarked
+        ? isAr ? 'تم حفظ المقال' : 'Article bookmarked'
+        : isAr ? 'تم إزالة الحفظ' : 'Bookmark removed'
     )
-  }, [bookmarked, isAr])
-
-  const handleShare = useCallback(async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: isAr ? article?.titleAr : article?.titleEn,
-          url: window.location.href,
-        })
-      } catch {
-        // user cancelled
-      }
-    } else {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success(isAr ? 'تم نسخ الرابط' : 'Link copied to clipboard')
-    }
-  }, [article, isAr])
+  }, [selectedArticleId, toggleBookmark, isBookmarked, isAr])
 
   const handlePrint = useCallback(() => {
     window.print()
   }, [])
+
+  // ---- Smart Share ----
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      toast.success(isAr ? 'تم نسخ الرابط' : 'Link copied to clipboard')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error(isAr ? 'فشل في نسخ الرابط' : 'Failed to copy link')
+    }
+  }, [isAr])
+
+  const handleShareTwitter = useCallback(() => {
+    const text = encodeURIComponent(
+      article ? (isAr ? article.titleAr : article.titleEn) : ''
+    )
+    const url = encodeURIComponent(window.location.href)
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank', 'noopener')
+  }, [article, isAr])
+
+  const handleShareWhatsApp = useCallback(() => {
+    const text = encodeURIComponent(
+      `${article ? (isAr ? article.titleAr : article.titleEn) : ''} ${window.location.href}`
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener')
+  }, [article, isAr])
+
+  const handleShareLinkedIn = useCallback(() => {
+    const url = encodeURIComponent(window.location.href)
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, '_blank', 'noopener')
+  }, [])
+
+  const handleShareAsQuote = useCallback(async () => {
+    if (!article) return
+    const content = isAr
+      ? (article.contentAr || article.content || '')
+      : (article.contentEn || article.content || '')
+    const firstParagraph = content.split('\n\n')[0]?.trim() || ''
+    const title = isAr ? article.titleAr : article.titleEn
+    const quote = `"${firstParagraph}"\n\n— ${title}`
+    try {
+      await navigator.clipboard.writeText(quote)
+      toast.success(isAr ? 'تم نسخ الاقتباس' : 'Quote copied to clipboard')
+    } catch {
+      toast.error(isAr ? 'فشل في نسخ الاقتباس' : 'Failed to copy quote')
+    }
+  }, [article, isAr])
+
+  // ---- Comment Submit ----
+  const handleSubmitComment = useCallback(() => {
+    if (!selectedArticleId || !commentContent.trim()) return
+    setSubmittingComment(true)
+    addComment({
+      articleId: selectedArticleId,
+      authorName: commentAuthor.trim() || (isAr ? 'مجهول' : 'Anonymous'),
+      authorAvatar: '',
+      content: commentContent.trim(),
+      createdAt: new Date().toISOString(),
+    })
+    setCommentContent('')
+    toast.success(isAr ? 'تم إضافة التعليق' : 'Comment added')
+    setSubmittingComment(false)
+  }, [selectedArticleId, commentAuthor, commentContent, addComment, isAr])
+
+  // ---- Reading Mode ----
+  const handleToggleReadingMode = useCallback(() => {
+    setReadingMode(!readingMode)
+  }, [readingMode, setReadingMode])
+
+  // Computed values
+  const bookmarked = selectedArticleId ? isBookmarked(selectedArticleId) : false
+  const articleComments = selectedArticleId ? getArticleComments(selectedArticleId) : []
 
   // Loading state
   if (loading || !article) {
@@ -382,66 +583,105 @@ export function ArticlePage() {
   const BackArrow = isRTL ? ArrowRight : ArrowLeft
   const ChevIcon = isRTL ? ChevronLeft : ChevronRight
 
+  // Extract first paragraph for AI Opinion Summary
+  const firstParagraph = content.split('\n\n')[0]?.trim() || ''
+
   return (
-    <div className="min-h-screen">
-      <article className="container mx-auto px-4 py-6 max-w-4xl space-y-6">
+    <div className={`min-h-screen ${readingMode ? 'reading-mode-active' : ''}`}>
+      {/* ---- Reading Progress Bar ---- */}
+      <ReadingProgressBar />
+
+      {/* ---- Reading Mode Exit Button ---- */}
+      <AnimatePresence>
+        {readingMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-4 right-4 z-[99] sm:top-6 sm:right-6"
+          >
+            <Button
+              onClick={handleToggleReadingMode}
+              className="btn-ai-gradient gap-2 shadow-lg"
+              size="sm"
+            >
+              <X className="size-4" />
+              {isAr ? 'خروج من وضع القراءة' : 'Exit Reading Mode'}
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <article
+        ref={articleRef}
+        className={`container mx-auto px-4 py-6 transition-all duration-500 ${
+          readingMode
+            ? 'max-w-[680px] reading-mode-content'
+            : 'max-w-4xl'
+        } space-y-6`}
+      >
         {/* ---- Breadcrumb ---- */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild className="cursor-pointer">
-                  <span onClick={() => navigate('home')}>
-                    <Home className="size-3.5 inline-block me-1" />
-                    {isAr ? 'الرئيسية' : 'Home'}
-                  </span>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator>
-                <ChevIcon className="size-3.5" />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild className="cursor-pointer">
-                  <span onClick={() => navigate('home')}>
-                    {catLabel}
-                  </span>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator>
-                <ChevIcon className="size-3.5" />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbPage className="line-clamp-1 max-w-[200px] sm:max-w-[300px]">
-                  {title}
-                </BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </motion.div>
+        {!readingMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild className="cursor-pointer">
+                    <span onClick={() => navigate('home')}>
+                      <Home className="size-3.5 inline-block me-1" />
+                      {isAr ? 'الرئيسية' : 'Home'}
+                    </span>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator>
+                  <ChevIcon className="size-3.5" />
+                </BreadcrumbSeparator>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild className="cursor-pointer">
+                    <span onClick={() => navigate('home')}>
+                      {catLabel}
+                    </span>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator>
+                  <ChevIcon className="size-3.5" />
+                </BreadcrumbSeparator>
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="line-clamp-1 max-w-[200px] sm:max-w-[300px]">
+                    {title}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </motion.div>
+        )}
 
         {/* ---- Back button ---- */}
-        <motion.div
-          initial={{ opacity: 0, x: isRTL ? 10 : -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              selectArticle(null)
-              navigate('home')
-            }}
+        {!readingMode && (
+          <motion.div
+            initial={{ opacity: 0, x: isRTL ? 10 : -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
           >
-            <BackArrow className="size-4" />
-            {isAr ? 'العودة للأخبار' : 'Back to News'}
-          </Button>
-        </motion.div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                selectArticle(null)
+                navigate('home')
+              }}
+            >
+              <BackArrow className="size-4" />
+              {isAr ? 'العودة للأخبار' : 'Back to News'}
+            </Button>
+          </motion.div>
+        )}
 
         {/* ---- Article Header ---- */}
         <motion.header
@@ -471,7 +711,12 @@ export function ArticlePage() {
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-tight">
+          <h1
+            className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-tight"
+            style={{
+              fontSize: readingMode ? `${fontSize + 8}px` : undefined,
+            }}
+          >
             {title}
           </h1>
 
@@ -534,7 +779,7 @@ export function ArticlePage() {
           aria-label={isAr ? 'ملخص ذكي' : 'AI Summary'}
         >
           <div className="relative rounded-xl overflow-hidden">
-            {/* Gradient border effect — outer glow ring */}
+            {/* Gradient border effect */}
             <div className="absolute inset-0 rounded-xl">
               <div className="absolute inset-0 rounded-xl ai-gradient-animated opacity-70" />
             </div>
@@ -627,15 +872,42 @@ export function ArticlePage() {
             {isAr ? 'استمع للخبر' : 'Listen to article'}
           </Button>
 
+          {/* Reading Mode Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleReadingMode}
+                className={`gap-2 ${
+                  readingMode
+                    ? 'border-ai-purple bg-ai-purple/10 text-ai-purple'
+                    : 'border-ai-purple/30 hover:border-ai-purple/60 hover:bg-ai-purple/10'
+                }`}
+              >
+                <BookOpenCheck className="size-4" />
+                {readingMode
+                  ? isAr ? 'وضع القراءة' : 'Reading Mode'
+                  : isAr ? 'وضع القراءة' : 'Reading Mode'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {readingMode
+                ? isAr ? 'اضغط للخروج من وضع القراءة' : 'Click to exit reading mode'
+                : isAr ? 'وضع خالي من الإلهاء للقراءة' : 'Distraction-free reading mode'}
+            </TooltipContent>
+          </Tooltip>
+
           <div className="flex-1" />
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5">
+            {/* Bookmark */}
             <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleBookmark}
+                onClick={handleBookmarkToggle}
                 className={`size-9 ${bookmarked ? 'text-ai-purple' : ''}`}
                 aria-label={isAr ? 'حفظ' : 'Bookmark'}
               >
@@ -643,18 +915,94 @@ export function ArticlePage() {
               </Button>
             </motion.div>
 
-            <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-9"
-                onClick={handleShare}
-                aria-label={isAr ? 'مشاركة' : 'Share'}
+            {/* Smart Share Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9"
+                    aria-label={isAr ? 'مشاركة' : 'Share'}
+                  >
+                    <Share2 className="size-4" />
+                  </Button>
+                </motion.div>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-64 p-3 space-y-2"
+                align={isRTL ? 'start' : 'end'}
               >
-                <Share2 className="size-4" />
-              </Button>
-            </motion.div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">
+                  {isAr ? 'مشاركة المقال' : 'Share Article'}
+                </p>
 
+                {/* Copy Link */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-sm"
+                  onClick={handleCopyLink}
+                >
+                  {copied ? (
+                    <Check className="size-4 text-green-500" />
+                  ) : (
+                    <Copy className="size-4" />
+                  )}
+                  {copied
+                    ? isAr ? 'تم النسخ!' : 'Copied!'
+                    : isAr ? 'نسخ الرابط' : 'Copy Link'}
+                </Button>
+
+                {/* Share as Quote */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-sm"
+                  onClick={handleShareAsQuote}
+                >
+                  <Quote className="size-4" />
+                  {isAr ? 'مشاركة كاقتباس' : 'Share as Quote'}
+                </Button>
+
+                <Separator className="my-1" />
+
+                {/* Twitter/X */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-sm"
+                  onClick={handleShareTwitter}
+                >
+                  <Twitter className="size-4" />
+                  {isAr ? 'مشاركة على X' : 'Share on X'}
+                </Button>
+
+                {/* WhatsApp */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-sm"
+                  onClick={handleShareWhatsApp}
+                >
+                  <MessageCircle className="size-4 text-green-500" />
+                  {isAr ? 'مشاركة على واتساب' : 'Share on WhatsApp'}
+                </Button>
+
+                {/* LinkedIn */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-sm"
+                  onClick={handleShareLinkedIn}
+                >
+                  <Linkedin className="size-4 text-blue-600" />
+                  {isAr ? 'مشاركة على لينكدإن' : 'Share on LinkedIn'}
+                </Button>
+              </PopoverContent>
+            </Popover>
+
+            {/* Print */}
             <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant="ghost"
@@ -676,13 +1024,16 @@ export function ArticlePage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="prose prose-lg dark:prose-invert max-w-none
+          className={`prose max-w-none
             prose-headings:font-bold prose-headings:ai-text-gradient
-            prose-p:leading-relaxed prose-p:text-foreground/90
             prose-strong:text-foreground
-            prose-a:text-ai-purple prose-a:no-underline hover:prose-a:underline"
+            prose-a:text-ai-purple prose-a:no-underline hover:prose-a:underline`}
           dir={isRTL ? 'rtl' : 'ltr'}
           lang={isRTL ? 'ar' : 'en'}
+          style={{
+            fontSize: readingMode ? `${fontSize}px` : undefined,
+            lineHeight: readingMode ? 2 : undefined,
+          }}
         >
           {content.split('\n\n').map((paragraph, i) => {
             const trimmed = paragraph.trim()
@@ -712,11 +1063,184 @@ export function ArticlePage() {
             }
 
             return (
-              <p key={i} className="mb-4">
+              <p key={i} className={`mb-4 ${readingMode ? 'leading-loose' : 'leading-relaxed text-foreground/90'}`}>
                 {trimmed}
               </p>
             )
           })}
+        </motion.section>
+
+        <Separator />
+
+        {/* ---- Comment Section ---- */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.25 }}
+          aria-label={isAr ? 'التعليقات' : 'Comments'}
+          className="space-y-6"
+        >
+          {/* Section Header */}
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-5 text-ai-purple" />
+            <h2 className="text-xl font-bold">
+              {isAr ? 'التعليقات' : 'Comments'}
+            </h2>
+            <Badge variant="secondary" className="text-xs">
+              {articleComments.length}
+            </Badge>
+          </div>
+
+          {/* Add Comment Form */}
+          <Card className="ai-card">
+            <CardContent className="p-5 sm:p-6 space-y-4">
+              <h3 className="font-semibold text-sm">
+                {isAr ? 'أضف تعليقك' : 'Add your comment'}
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  placeholder={isAr ? 'اسمك' : 'Your name'}
+                  value={commentAuthor}
+                  onChange={(e) => setCommentAuthor(e.target.value)}
+                  className="sm:max-w-[200px]"
+                />
+              </div>
+              <Textarea
+                placeholder={isAr ? 'اكتب تعليقك هنا...' : 'Write your comment here...'}
+                value={commentContent}
+                onChange={(e) => setCommentContent(e.target.value)}
+                className="min-h-[80px] resize-none"
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSubmitComment}
+                  disabled={!commentContent.trim() || submittingComment}
+                  className="btn-ai-gradient gap-2"
+                  size="sm"
+                >
+                  <Send className="size-3.5" />
+                  {isAr ? 'إرسال' : 'Submit'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Summary of Opinions Card */}
+          {articleComments.length > 0 && (
+            <div className="relative rounded-xl overflow-hidden">
+              {/* Gradient border */}
+              <div className="absolute inset-0 rounded-xl">
+                <div className="absolute inset-0 rounded-xl ai-gradient-animated opacity-50" />
+              </div>
+              <div className="relative m-[1px] rounded-[11px] bg-card">
+                <div className="p-5 sm:p-6 space-y-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-center size-8 rounded-lg ai-gradient text-white shadow-md">
+                      <Sparkles className="size-3.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold">
+                        {isAr ? 'ملخص الآراء بالذكاء الاصطناعي' : 'AI Summary of Opinions'}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {isAr ? 'تحليل تلقائي لأهم الآراء' : 'Automated analysis of key opinions'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm text-foreground/90 leading-relaxed">
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1.5 size-2 rounded-full bg-gradient-to-r from-ai-purple to-ai-cyan shrink-0" />
+                      <span>
+                        {isAr
+                          ? 'معظم المعلقين يرون أن هذا التطور يمثل نقلة نوعية في مجال الذكاء الاصطناعي مع التركيز على الفوائد المحتملة.'
+                          : 'Most commenters see this development as a significant leap in AI, focusing on potential benefits.'}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1.5 size-2 rounded-full bg-gradient-to-r from-ai-blue to-ai-cyan shrink-0" />
+                      <span>
+                        {isAr
+                          ? 'هناك اهتمام واضح بالتأثير على المنطقة العربية والدول الناشئة مع دعوات لمزيد من التفاصيل.'
+                          : 'There is clear interest in the impact on the Arab region and emerging markets, with calls for more details.'}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1.5 size-2 rounded-full bg-gradient-to-r from-ai-indigo to-ai-blue shrink-0" />
+                      <span>
+                        {isAr
+                          ? 'بعض المعلقين من المجتمع الأكاديمي يؤكدون على أهمية الأسئلة الأخلاقية المترتبة على هذه التطورات.'
+                          : 'Some academic commenters emphasize the importance of ethical questions arising from these developments.'}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="gap-1 text-[10px]">
+                    <Sparkles className="size-2.5 text-ai-purple" />
+                    {isAr ? 'تحليل تجريبي' : 'Experimental analysis'}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Comments List */}
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {articleComments.length > 0 ? (
+              articleComments.map((comment, i) => (
+                <motion.div
+                  key={comment.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.05 }}
+                >
+                  <Card className="ai-card">
+                    <CardContent className="p-4 sm:p-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="size-9 shrink-0">
+                          <AvatarFallback className="bg-gradient-to-br from-ai-purple/20 to-ai-cyan/20 text-xs font-bold text-ai-purple">
+                            {comment.authorName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-sm truncate">
+                              {comment.authorName}
+                            </span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDate(comment.createdAt, language)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-foreground/90 leading-relaxed">
+                            {comment.content}
+                          </p>
+                          {/* Like/Unlike */}
+                          <button
+                            onClick={() => toggleCommentLike(comment.id)}
+                            className={`inline-flex items-center gap-1 text-xs transition-colors ${
+                              comment.liked
+                                ? 'text-ai-purple font-semibold'
+                                : 'text-muted-foreground hover:text-ai-purple'
+                            }`}
+                          >
+                            <ThumbsUp className={`size-3 ${comment.liked ? 'fill-ai-purple' : ''}`} />
+                            {comment.likes > 0 && <span>{comment.likes}</span>}
+                          </button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))
+            ) : (
+              <Card className="ai-card">
+                <CardContent className="p-6 text-center">
+                  <MessageSquare className="size-8 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {isAr ? 'لا توجد تعليقات بعد. كن أول من يعلق!' : 'No comments yet. Be the first to comment!'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </motion.section>
 
         <Separator />
@@ -782,89 +1306,108 @@ export function ArticlePage() {
         )}
 
         {/* ---- Related Articles ---- */}
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Zap className="size-5 text-ai-purple" />
-            <h2 className="text-xl font-bold">
-              {isAr ? 'أخبار ذات صلة' : 'Related Articles'}
-            </h2>
-          </div>
-
-          {relatedLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="ai-card">
-                  <CardContent className="p-5 space-y-3">
-                    <Skeleton className="h-4 w-20 skeleton-ai" />
-                    <Skeleton className="h-5 w-full skeleton-ai" />
-                    <Skeleton className="h-5 w-3/4 skeleton-ai" />
-                  </CardContent>
-                </Card>
-              ))}
+        {!readingMode && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Zap className="size-5 text-ai-purple" />
+              <h2 className="text-xl font-bold">
+                {isAr ? 'أخبار ذات صلة' : 'Related Articles'}
+              </h2>
             </div>
-          ) : relatedArticles.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {relatedArticles.map((related, i) => {
-                const relTitle = isAr ? related.titleAr : (related.titleEn || related.title)
-                const relCategory = getCategoryLabel(related.category, isAr)
 
-                return (
-                  <motion.div
-                    key={related.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.35 + i * 0.08 }}
-                  >
-                    <Card
-                      className="ai-card group cursor-pointer h-full"
-                      onClick={() => {
-                        selectArticle(related.id)
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                      }}
+            {relatedLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="ai-card">
+                    <CardContent className="p-5 space-y-3">
+                      <Skeleton className="h-4 w-20 skeleton-ai" />
+                      <Skeleton className="h-5 w-full skeleton-ai" />
+                      <Skeleton className="h-5 w-3/4 skeleton-ai" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : relatedArticles.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {relatedArticles.map((related, i) => {
+                  const relTitle = isAr ? related.titleAr : (related.titleEn || related.title)
+                  const relCategory = getCategoryLabel(related.category, isAr)
+
+                  return (
+                    <motion.div
+                      key={related.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.35 + i * 0.08 }}
                     >
-                      <CardContent className="p-5 space-y-3">
-                        <div className="flex items-center gap-2">
-                          {related.isBreaking && (
-                            <Badge className="badge-ai-gradient text-[10px] px-1.5 py-0 gap-0.5">
-                              <Zap className="size-2.5" />
-                              {isAr ? 'عاجل' : 'Live'}
+                      <Card
+                        className="ai-card group cursor-pointer h-full"
+                        onClick={() => {
+                          selectArticle(related.id)
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                        }}
+                      >
+                        <CardContent className="p-5 space-y-3">
+                          <div className="flex items-center gap-2">
+                            {related.isBreaking && (
+                              <Badge className="badge-ai-gradient text-[10px] px-1.5 py-0 gap-0.5">
+                                <Zap className="size-2.5" />
+                                {isAr ? 'عاجل' : 'Live'}
+                              </Badge>
+                            )}
+                            <Badge variant="secondary" className="text-xs">
+                              {relCategory}
                             </Badge>
-                          )}
-                          <Badge variant="secondary" className="text-xs">
-                            {relCategory}
-                          </Badge>
-                        </div>
-                        <h3 className="font-bold leading-relaxed line-clamp-2 group-hover:text-primary transition-colors text-sm">
-                          {relTitle}
-                        </h3>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Eye className="size-3" />
-                            {formatViews(related.views, language)}
-                          </span>
-                          <span>{formatDate(related.publishedAt, language)}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                )
-              })}
-            </div>
-          ) : (
-            <Card className="ai-card">
-              <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">
-                  {isAr ? 'لا توجد أخبار ذات صلة حالياً' : 'No related articles found'}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </motion.section>
+                          </div>
+                          <h3 className="font-bold leading-relaxed line-clamp-2 group-hover:text-primary transition-colors text-sm">
+                            {relTitle}
+                          </h3>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Eye className="size-3" />
+                              {formatViews(related.views, language)}
+                            </span>
+                            <span>{formatDate(related.publishedAt, language)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            ) : (
+              <Card className="ai-card">
+                <CardContent className="p-6 text-center">
+                  <p className="text-muted-foreground">
+                    {isAr ? 'لا توجد أخبار ذات صلة حالياً' : 'No related articles found'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </motion.section>
+        )}
       </article>
+
+      {/* ---- Reading Mode Styles (injected via className logic) ---- */}
+      <style jsx global>{`
+        .reading-mode-active {
+          background-color: var(--reading-mode-bg, #faf6f0);
+        }
+        .dark .reading-mode-active {
+          background-color: var(--reading-mode-bg-dark, #12121f);
+        }
+        .reading-mode-content {
+          padding-top: 2rem;
+          padding-bottom: 4rem;
+        }
+        .reading-mode-content p {
+          line-height: 2 !important;
+        }
+      `}</style>
     </div>
   )
 }

@@ -22,6 +22,10 @@ import {
   ChevronRight,
   Type,
   Languages,
+  BellRing,
+  BookMarked,
+  Mail,
+  Eye,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -115,17 +119,47 @@ function SettingRow({
 export function SettingsPage() {
   const language = useLanguage()
   const isRTL = useIsRTL()
-  const { setLanguage, setTheme, navigate } = useAppStore()
+  const {
+    setLanguage,
+    setTheme,
+    navigate,
+    // Font size from store
+    fontSize,
+    setFontSize,
+    // Reading mode from store
+    readingMode,
+    setReadingMode,
+    // Push notifications from store
+    pushNotificationsEnabled,
+    setPushNotificationsEnabled,
+    // Bookmarks
+    bookmarkedIds,
+    // Newsletter
+    newsletterSubscribed,
+  } = useAppStore()
   const theme = useAppStore((s) => s.theme)
 
   // Local state
-  const [fontSize, setFontSize] = useState(16)
   const [autoTTS, setAutoTTS] = useState(false)
   const [breakingNews, setBreakingNews] = useState(true)
   const [dailyDigest, setDailyDigest] = useState(true)
   const [topicUpdates, setTopicUpdates] = useState(false)
   const [weeklyRecs, setWeeklyRecs] = useState(true)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  // Push notification permission handler
+  const handlePushNotificationToggle = async () => {
+    if (pushNotificationsEnabled) {
+      setPushNotificationsEnabled(false)
+      return
+    }
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const permission = await Notification.requestPermission()
+      if (permission === 'granted') {
+        setPushNotificationsEnabled(true)
+      }
+    }
+  }
 
   // Content preferences categories
   const contentCategories = [
@@ -230,6 +264,35 @@ export function SettingsPage() {
             <Badge variant="secondary" className="text-xs">
               {isRTL ? 'مستوى مجاني' : 'Free Tier'}
             </Badge>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border bg-muted/30">
+            <BookMarked className="size-4 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">
+                {isRTL ? 'المحفوظات' : 'Bookmarks'}
+              </p>
+              <p className="text-sm font-bold tabular-nums">
+                {bookmarkedIds.length}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border bg-muted/30">
+            <Mail className="size-4 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">
+                {isRTL ? 'النشرة البريدية' : 'Newsletter'}
+              </p>
+              <p className="text-sm font-bold">
+                {newsletterSubscribed
+                  ? isRTL ? 'مشترك' : 'Subscribed'
+                  : isRTL ? 'غير مشترك' : 'Not Subscribed'}
+              </p>
+            </div>
           </div>
         </div>
       </SettingsSection>
@@ -340,6 +403,27 @@ export function SettingsPage() {
         delay={0.2}
       >
         <SettingRow
+          label={isRTL ? 'إشعارات الدفع' : 'Push Notifications'}
+          description={
+            isRTL
+              ? 'تلقي إشعارات فورية على جهازك'
+              : 'Receive instant push notifications on your device'
+          }
+        >
+          <Button
+            size="sm"
+            variant={pushNotificationsEnabled ? 'default' : 'outline'}
+            className="gap-1.5"
+            onClick={handlePushNotificationToggle}
+          >
+            <BellRing className="size-3.5" />
+            {pushNotificationsEnabled
+              ? isRTL ? 'مفعّل' : 'Enabled'
+              : isRTL ? 'تفعيل' : 'Enable'}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
           label={isRTL ? 'إشعارات الأخبار العاجلة' : 'Breaking News Alerts'}
           description={
             isRTL
@@ -428,6 +512,22 @@ export function SettingsPage() {
         delay={0.3}
       >
         <div className="space-y-3">
+          <SettingRow
+            label={isRTL ? 'وضع القراءة' : 'Reading Mode'}
+            description={
+              isRTL
+                ? 'عرض مبسط وخالٍ من المشتتات للمقالات'
+                : 'Simplified, distraction-free view for articles'
+            }
+          >
+            <div className="flex items-center gap-2">
+              <Eye className={`size-4 ${readingMode ? 'text-primary' : 'text-muted-foreground'}`} />
+              <Switch checked={readingMode} onCheckedChange={setReadingMode} />
+            </div>
+          </SettingRow>
+
+          <Separator />
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium flex items-center gap-1.5">

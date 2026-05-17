@@ -890,3 +890,78 @@
 .dark .nav-ai-active {
   color: #c4b5fd;
 }
+
+/* ============================================================
+   READING MODE
+   ============================================================ */
+
+.reading-mode {
+  --reading-bg: #faf8f1;
+  --reading-text: #3d3929;
+}
+
+.dark .reading-mode {
+  --reading-bg: #1a1a1a;
+  --reading-text: #d4d0c8;
+}
+
+.reading-mode .ai-glass,
+.reading-mode header,
+.reading-mode footer,
+.reading-mode nav,
+.reading-mode [data-reading-hide] {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.reading-mode article {
+  max-width: 680px !important;
+  margin: 0 auto !important;
+  padding: 2rem 1rem !important;
+  background: var(--reading-bg) !important;
+  color: var(--reading-text) !important;
+  border-radius: 1rem;
+  line-height: 1.9 !important;
+  font-size: 1.125rem !important;
+}
+
+.reading-mode article h1,
+.reading-mode article h2,
+.reading-mode article h3 {
+  color: var(--reading-text) !important;
+  line-height: 1.4 !important;
+}
+
+.reading-mode article p {
+  margin-bottom: 1.5rem !important;
+  line-height: 1.9 !important;
+}
+
+/* Exit reading mode floating button */
+.reading-mode-exit-btn {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  animation: ai-fade-in-up 0.3s ease-out;
+}
+
+/* Infinite scroll sentinel */
+.infinite-scroll-sentinel {
+  height: 1px;
+  width: 100%;
+}
+
+/* Newsletter section */
+.newsletter-gradient {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(6, 182, 212, 0.1), rgba(139, 92, 246, 0.05));
+}
+
+.dark .newsletter-gradient {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(6, 182, 212, 0.12), rgba(139, 92, 246, 0.08));
+}

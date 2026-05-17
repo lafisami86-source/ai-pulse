@@ -1,10 +1,18 @@
 'use client'
 
-import { useAppStore, useLanguage, useIsRTL } from '@/lib/store'
+import {
+  useAppStore,
+  useLanguage,
+  useIsRTL,
+  useBookmarkedIds,
+  useReadingMode,
+  useNotifications,
+  usePushNotificationsEnabled,
+} from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Progress } from '@/components/ui/progress'
+import { Switch } from '@/components/ui/switch'
 import { motion } from 'framer-motion'
 import {
   BookOpen,
@@ -18,6 +26,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Sparkles,
+  Eye,
+  Bell,
+  BellRing,
+  BellOff,
 } from 'lucide-react'
 import {
   BarChart,
@@ -29,7 +41,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
 const CHART_COLORS = ['#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1']
 
@@ -166,7 +178,7 @@ function DashboardSkeleton() {
         <Skeleton className="h-5 w-40" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-28 rounded-xl" />
         ))}
       </div>
@@ -180,13 +192,23 @@ function DashboardSkeleton() {
 export function DashboardPage() {
   const language = useLanguage()
   const isRTL = useIsRTL()
-  const { selectArticle } = useAppStore()
+  const { selectArticle, setReadingMode, setPushNotificationsEnabled } = useAppStore()
+  const bookmarkedIds = useBookmarkedIds()
+  const readingMode = useReadingMode()
+  const notifications = useNotifications()
+  const pushNotificationsEnabled = usePushNotificationsEnabled()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 800)
     return () => clearTimeout(timer)
   }, [])
+
+  // Derived values
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  )
 
   if (loading) return <DashboardSkeleton />
 
@@ -209,7 +231,7 @@ export function DashboardPage() {
     },
     {
       icon: <Bookmark className="size-5" />,
-      value: '12',
+      value: String(bookmarkedIds.length),
       labelAr: 'إشارات مرجعية',
       labelEn: 'Bookmarks',
       trend: 3,
@@ -227,7 +249,7 @@ export function DashboardPage() {
     },
     {
       icon: <Clock className="size-5" />,
-      value: isRTL ? '3.5' : '3.5',
+      value: '3.5',
       unitAr: 'ساعات',
       unitEn: 'hours',
       labelAr: 'وقت القراءة',
@@ -235,6 +257,30 @@ export function DashboardPage() {
       trend: -0.5,
       trendUp: false,
       gradient: 'from-ai-pink to-ai-purple',
+    },
+    {
+      icon: <Eye className="size-5" />,
+      value: readingMode
+        ? isRTL ? 'مفعّل' : 'On'
+        : isRTL ? 'معطّل' : 'Off',
+      labelAr: 'وضع القراءة',
+      labelEn: 'Reading Mode',
+      toggle: true,
+      toggleValue: readingMode,
+      onToggle: (checked: boolean) => setReadingMode(checked),
+      gradient: 'from-emerald-500 to-teal-500',
+    },
+    {
+      icon: unreadCount > 0
+        ? <BellRing className="size-5" />
+        : <Bell className="size-5" />,
+      value: String(unreadCount),
+      labelAr: 'إشعارات غير مقروءة',
+      labelEn: 'Unread Notifications',
+      badge: unreadCount > 0 ? unreadCount : undefined,
+      trend: unreadCount > 0 ? 1 : 0,
+      trendUp: unreadCount > 0,
+      gradient: 'from-amber-500 to-orange-500',
     },
   ]
 
@@ -264,31 +310,44 @@ export function DashboardPage() {
       </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {stats.map((stat, i) => (
           <motion.div key={i} variants={item}>
             <Card className="ai-card group h-full">
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div
-                    className={`inline-flex items-center justify-center size-10 rounded-xl bg-gradient-to-br ${stat.gradient} text-white shadow-md`}
+                    className={`inline-flex items-center justify-center size-10 rounded-xl bg-gradient-to-br ${stat.gradient} text-white shadow-md relative`}
                   >
                     {stat.icon}
-                  </div>
-                  <div
-                    className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
-                      stat.trendUp
-                        ? 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 dark:bg-emerald-500/15'
-                        : 'text-red-600 bg-red-500/10 dark:text-red-400 dark:bg-red-500/15'
-                    }`}
-                  >
-                    {stat.trendUp ? (
-                      <TrendingUp className="size-3" />
-                    ) : (
-                      <TrendingDown className="size-3" />
+                    {stat.badge && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center size-4 rounded-full bg-red-500 text-[10px] text-white font-bold leading-none">
+                        {stat.badge > 9 ? '9+' : stat.badge}
+                      </span>
                     )}
-                    {Math.abs(stat.trend)}%
                   </div>
+                  {stat.toggle ? (
+                    <Switch
+                      checked={stat.toggleValue}
+                      onCheckedChange={stat.onToggle}
+                      className="scale-90"
+                    />
+                  ) : stat.trend !== undefined && stat.trend !== 0 ? (
+                    <div
+                      className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                        stat.trendUp
+                          ? 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 dark:bg-emerald-500/15'
+                          : 'text-red-600 bg-red-500/10 dark:text-red-400 dark:bg-red-500/15'
+                      }`}
+                    >
+                      {stat.trendUp ? (
+                        <TrendingUp className="size-3" />
+                      ) : (
+                        <TrendingDown className="size-3" />
+                      )}
+                      {Math.abs(stat.trend)}%
+                    </div>
+                  ) : null}
                 </div>
                 <div>
                   <div className="text-2xl font-bold">
@@ -308,6 +367,59 @@ export function DashboardPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* Push Notifications Status Bar */}
+      <motion.div variants={item}>
+        <Card className="ai-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {pushNotificationsEnabled ? (
+                  <div className="flex items-center justify-center size-9 rounded-lg bg-emerald-500/15 text-emerald-500">
+                    <BellRing className="size-5" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center size-9 rounded-lg bg-muted text-muted-foreground">
+                    <BellOff className="size-5" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium">
+                    {isRTL ? 'إشعارات الدفع' : 'Push Notifications'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {pushNotificationsEnabled
+                      ? isRTL
+                        ? 'مفعّلة — ستتلقى إشعارات فورية بالأخبار المهمة'
+                        : 'Enabled — You\'ll receive instant notifications for important news'
+                      : isRTL
+                        ? 'معطّلة — فعّلها لتلقي إشعارات فورية بالأخبار المهمة'
+                        : 'Disabled — Enable to receive instant notifications for important news'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge
+                  variant={pushNotificationsEnabled ? 'default' : 'secondary'}
+                  className={
+                    pushNotificationsEnabled
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20'
+                      : ''
+                  }
+                >
+                  {pushNotificationsEnabled
+                    ? isRTL ? 'مفعّل' : 'Active'
+                    : isRTL ? 'معطّل' : 'Inactive'}
+                </Badge>
+                <Switch
+                  checked={pushNotificationsEnabled}
+                  onCheckedChange={setPushNotificationsEnabled}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Your Interests */}
       <motion.div variants={item}>
@@ -422,6 +534,9 @@ export function DashboardPage() {
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Bookmark className="size-5 text-ai-cyan" />
                 {isRTL ? 'المقالات المحفوظة' : 'Bookmarked Articles'}
+                <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                  {bookmarkedIds.length}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
