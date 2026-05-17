@@ -10,9 +10,15 @@ import { DashboardPage } from '@/components/pages/dashboard-page'
 import { AnalyticsPage } from '@/components/pages/analytics-page'
 import { ToolsPage } from '@/components/pages/tools-page'
 import { SettingsPage } from '@/components/pages/settings-page'
+import { useEffect } from 'react'
 
 function PageContent() {
   const currentPage = useCurrentPage()
+
+  // Scroll to top whenever page changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [currentPage])
 
   const renderPage = () => {
     switch (currentPage) {
