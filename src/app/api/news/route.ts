@@ -1,5 +1,6 @@
-import { db } from '@/lib/db'
+import { isDatabaseAvailable, db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { mockArticles } from '@/lib/mock-data'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,36 +10,62 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = 12
 
-    const where: Record<string, unknown> = {}
-    if (category) {
-      where.category = category
+    if (isDatabaseAvailable()) {
+      const where: Record<string, unknown> = {}
+      if (category) {
+        where.category = category
+      }
+
+      const [articles, total] = await Promise.all([
+        db!.article.findMany({
+          where,
+          include: {
+            source: true,
+          },
+          orderBy: {
+            publishedAt: 'desc',
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        db!.article.count({ where }),
+      ])
+
+      // Map articles to prioritize language-specific fields
+      const mappedArticles = articles.map((article) => {
+        const isAr = lang === 'ar'
+        return {
+          ...article,
+          title: isAr ? article.titleAr : article.titleEn,
+          summary: isAr ? article.summaryAr : article.summaryEn,
+          content: isAr ? article.contentAr : article.contentEn,
+        }
+      })
+
+      return NextResponse.json({
+        articles: mappedArticles,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      })
     }
 
-    const [articles, total] = await Promise.all([
-      db.article.findMany({
-        where,
-        include: {
-          source: true,
-        },
-        orderBy: {
-          publishedAt: 'desc',
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      db.article.count({ where }),
-    ])
+    // Fallback to mock data
+    let filtered = category
+      ? mockArticles.filter((a) => a.category === category)
+      : mockArticles
 
-    // Map articles to prioritize language-specific fields
-    const mappedArticles = articles.map((article) => {
-      const isAr = lang === 'ar'
-      return {
-        ...article,
-        title: isAr ? article.titleAr : article.titleEn,
-        summary: isAr ? article.summaryAr : article.summaryEn,
-        content: isAr ? article.contentAr : article.contentEn,
-      }
-    })
+    const isAr = lang === 'ar'
+    const total = filtered.length
+    const paginated = filtered.slice((page - 1) * limit, page * limit)
+
+    const mappedArticles = paginated.map((article) => ({
+      ...article,
+      tags: JSON.stringify(article.tags),
+      title: isAr ? article.titleAr : article.titleEn,
+      summary: isAr ? article.summaryAr : article.summaryEn,
+      content: isAr ? article.contentAr : article.contentEn,
+    }))
 
     return NextResponse.json({
       articles: mappedArticles,

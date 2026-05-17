@@ -1,5 +1,6 @@
-import { db } from '@/lib/db'
+import { isDatabaseAvailable, db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getArticleById } from '@/lib/mock-data'
 import ZAI from 'z-ai-web-dev-sdk'
 
 export async function POST(
@@ -9,23 +10,45 @@ export async function POST(
   try {
     const { id } = await params
 
-    const article = await db.article.findUnique({
-      where: { id },
-      include: {
-        source: true,
-      },
-    })
+    let contentToSummarize = ''
+    let articleSummaryAr = ''
+    let articleSummaryEn = ''
 
-    if (!article) {
-      return NextResponse.json(
-        { error: 'Article not found' },
-        { status: 404 }
-      )
+    if (isDatabaseAvailable()) {
+      const article = await db!.article.findUnique({
+        where: { id },
+        include: {
+          source: true,
+        },
+      })
+
+      if (!article) {
+        return NextResponse.json(
+          { error: 'Article not found' },
+          { status: 404 }
+        )
+      }
+
+      contentToSummarize =
+        article.contentEn || article.contentAr || article.summaryEn || article.summaryAr || ''
+      articleSummaryAr = article.summaryAr || ''
+      articleSummaryEn = article.summaryEn || ''
+    } else {
+      // Fallback to mock data
+      const mockArticle = getArticleById(id)
+
+      if (!mockArticle) {
+        return NextResponse.json(
+          { error: 'Article not found' },
+          { status: 404 }
+        )
+      }
+
+      contentToSummarize =
+        mockArticle.contentEn || mockArticle.contentAr || mockArticle.summaryEn || mockArticle.summaryAr || ''
+      articleSummaryAr = mockArticle.summaryAr || ''
+      articleSummaryEn = mockArticle.summaryEn || ''
     }
-
-    // Use the best available content for summarization
-    const contentToSummarize =
-      article.contentEn || article.contentAr || article.summaryEn || article.summaryAr || ''
 
     if (!contentToSummarize) {
       return NextResponse.json(
@@ -34,51 +57,62 @@ export async function POST(
       )
     }
 
-    const zai = await ZAI.create()
+    // Try to use ZAI SDK for AI summarization
+    let summaryAr = articleSummaryAr
+    let summaryEn = articleSummaryEn
 
-    // Generate Arabic summary
-    const arResponse = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content:
-            'أنت مساعد ذكي متخصص في تلخيص الأخبار. قم بتلخيص المقال التالي في 3 نقاط رئيسية موجزة وواضحة. استخدم التنسيق التالي:\n• النقطة الأولى\n• النقطة الثانية\n• النقطة الثالثة',
-        },
-        {
-          role: 'user',
-          content: `لخص هذا المقال في 3 نقاط:\n\n${contentToSummarize}`,
-        },
-      ],
-    })
+    try {
+      const zai = await ZAI.create()
 
-    // Generate English summary
-    const enResponse = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an intelligent assistant specialized in summarizing news. Summarize the following article in 3 concise and clear bullet points. Use this format:\n• First point\n• Second point\n• Third point',
-        },
-        {
-          role: 'user',
-          content: `Summarize this article in 3 bullet points:\n\n${contentToSummarize}`,
-        },
-      ],
-    })
+      // Generate Arabic summary
+      const arResponse = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content:
+              'أنت مساعد ذكي متخصص في تلخيص الأخبار. قم بتلخيص المقال التالي في 3 نقاط رئيسية موجزة وواضحة. استخدم التنسيق التالي:\n• النقطة الأولى\n• النقطة الثانية\n• النقطة الثالثة',
+          },
+          {
+            role: 'user',
+            content: `لخص هذا المقال في 3 نقاط:\n\n${contentToSummarize}`,
+          },
+        ],
+      })
 
-    const summaryAr =
-      arResponse.choices?.[0]?.message?.content || article.summaryAr || ''
-    const summaryEn =
-      enResponse.choices?.[0]?.message?.content || article.summaryEn || ''
+      // Generate English summary
+      const enResponse = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an intelligent assistant specialized in summarizing news. Summarize the following article in 3 concise and clear bullet points. Use this format:\n• First point\n• Second point\n• Third point',
+          },
+          {
+            role: 'user',
+            content: `Summarize this article in 3 bullet points:\n\n${contentToSummarize}`,
+          },
+        ],
+      })
 
-    // Update the article with the generated summaries
-    await db.article.update({
-      where: { id },
-      data: {
-        summaryAr,
-        summaryEn,
-      },
-    })
+      summaryAr =
+        arResponse.choices?.[0]?.message?.content || articleSummaryAr
+      summaryEn =
+        enResponse.choices?.[0]?.message?.content || articleSummaryEn
+    } catch (aiError) {
+      console.warn('AI summarization unavailable, using existing summaries:', aiError)
+      // Keep the existing article summaries as fallback
+    }
+
+    // Update the article with the generated summaries if db is available
+    if (isDatabaseAvailable()) {
+      await db!.article.update({
+        where: { id },
+        data: {
+          summaryAr,
+          summaryEn,
+        },
+      })
+    }
 
     return NextResponse.json({
       summary: {

@@ -1,10 +1,13 @@
 // Mock data for AI Pulse news articles
 
 export interface ArticleSource {
+  id?: string
   name: string
   reliabilityScore: number
   logo: string
   url?: string
+  type?: string
+  isActive?: boolean
 }
 
 export interface Article {
@@ -19,9 +22,25 @@ export interface Article {
   tags: string[]
   views: number
   isBreaking: boolean
+  isTrending: boolean
   publishedAt: string
   source: ArticleSource
   imageUrl?: string
+}
+
+export interface MockTool {
+  id: string
+  name: string
+  description: string
+  category: string
+  rating: number
+  pricing: string
+  url: string
+  imageUrl: string
+  features: string[]
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export const categoryLabels: Record<string, { ar: string; en: string }> = {
@@ -35,6 +54,10 @@ export const categoryLabels: Record<string, { ar: string; en: string }> = {
   ethics: { ar: 'الأخلاقيات', en: 'Ethics' },
   autonomous: { ar: 'القيادة الذاتية', en: 'Autonomous' },
   generative: { ar: 'توليد المحتوى', en: 'Generative AI' },
+  writing: { ar: 'الكتابة', en: 'Writing' },
+  coding: { ar: 'البرمجة', en: 'Coding' },
+  design: { ar: 'التصميم', en: 'Design' },
+  productivity: { ar: 'الإنتاجية', en: 'Productivity' },
 }
 
 export const mockArticles: Article[] = [
@@ -82,8 +105,9 @@ The model is available in several pricing tiers starting from free for basic usa
     tags: ['Google', 'Gemini', 'LLM'],
     views: 15420,
     isBreaking: true,
+    isTrending: true,
     publishedAt: '2026-05-17T08:30:00Z',
-    source: { name: 'TechCrunch AI', reliabilityScore: 0.92, logo: '🔬', url: 'https://techcrunch.com/ai' },
+    source: { id: 'src1', name: 'TechCrunch AI', reliabilityScore: 0.92, logo: '🔬', url: 'https://techcrunch.com/ai', type: 'rss', isActive: true },
   },
   {
     id: 'art2',
@@ -113,8 +137,9 @@ The project is expected to create over 50,000 direct jobs and thousands of indir
     tags: ['Apple', 'Investment', 'Infrastructure'],
     views: 23100,
     isBreaking: true,
+    isTrending: true,
     publishedAt: '2026-05-17T06:00:00Z',
-    source: { name: 'Reuters Tech', reliabilityScore: 0.95, logo: '📰', url: 'https://reuters.com/technology' },
+    source: { id: 'src2', name: 'Reuters Tech', reliabilityScore: 0.95, logo: '📰', url: 'https://reuters.com/technology', type: 'rss', isActive: true },
   },
   {
     id: 'art3',
@@ -144,8 +169,9 @@ The World Health Organization announced the endorsement of the system as a diagn
     tags: ['AI', 'Healthcare', 'Diagnosis'],
     views: 8930,
     isBreaking: false,
+    isTrending: false,
     publishedAt: '2026-05-16T14:00:00Z',
-    source: { name: 'Nature Medicine', reliabilityScore: 0.98, logo: '🏥', url: 'https://nature.com/medicine' },
+    source: { id: 'src3', name: 'Nature Medicine', reliabilityScore: 0.98, logo: '🏥', url: 'https://nature.com/medicine', type: 'rss', isActive: true },
   },
   {
     id: 'art4',
@@ -175,8 +201,9 @@ Users exceeded 100,000 designers in just the first month, with positive ratings 
     tags: ['OpenAI', 'DALL-E', 'Design'],
     views: 12560,
     isBreaking: false,
+    isTrending: true,
     publishedAt: '2026-05-16T10:30:00Z',
-    source: { name: 'The Verge AI', reliabilityScore: 0.88, logo: '🎨', url: 'https://theverge.com/ai' },
+    source: { id: 'src4', name: 'The Verge AI', reliabilityScore: 0.88, logo: '🎨', url: 'https://theverge.com/ai', type: 'rss', isActive: true },
   },
   {
     id: 'art5',
@@ -206,8 +233,9 @@ The company is conducting public road trials in 12 US cities, with over one mill
     tags: ['Waymo', 'Autonomous', 'Self-driving'],
     views: 9870,
     isBreaking: false,
+    isTrending: true,
     publishedAt: '2026-05-15T16:00:00Z',
-    source: { name: 'Wired Auto', reliabilityScore: 0.90, logo: '🚗', url: 'https://wired.com/transportation' },
+    source: { id: 'src5', name: 'Wired Auto', reliabilityScore: 0.90, logo: '🚗', url: 'https://wired.com/transportation', type: 'rss', isActive: true },
   },
   {
     id: 'art6',
@@ -237,8 +265,9 @@ One of the model's standout features is its ability to run on consumer hardware 
     tags: ['Hugging Face', 'Open Source', 'LLM'],
     views: 31200,
     isBreaking: true,
+    isTrending: true,
     publishedAt: '2026-05-15T12:00:00Z',
-    source: { name: 'ArXiv Daily', reliabilityScore: 0.93, logo: '📚', url: 'https://arxiv.org' },
+    source: { id: 'src6', name: 'ArXiv Daily', reliabilityScore: 0.93, logo: '📚', url: 'https://arxiv.org', type: 'rss', isActive: true },
   },
   {
     id: 'art7',
@@ -268,8 +297,9 @@ The robot's applications range from factory production lines to home care tasks,
     tags: ['Figure', 'Robotics', 'Humanoid'],
     views: 7650,
     isBreaking: false,
+    isTrending: false,
     publishedAt: '2026-05-14T09:00:00Z',
-    source: { name: 'IEEE Spectrum', reliabilityScore: 0.94, logo: '🤖', url: 'https://spectrum.ieee.org' },
+    source: { id: 'src7', name: 'IEEE Spectrum', reliabilityScore: 0.94, logo: '🤖', url: 'https://spectrum.ieee.org', type: 'rss', isActive: true },
   },
   {
     id: 'art8',
@@ -299,8 +329,9 @@ The regulation includes fines of up to 6% of annual revenue for violating organi
     tags: ['EU', 'Regulation', 'AI Ethics'],
     views: 5430,
     isBreaking: false,
+    isTrending: false,
     publishedAt: '2026-05-14T11:00:00Z',
-    source: { name: 'EU Commission', reliabilityScore: 0.97, logo: '⚖️', url: 'https://ec.europa.eu' },
+    source: { id: 'src8', name: 'EU Commission', reliabilityScore: 0.97, logo: '⚖️', url: 'https://ec.europa.eu', type: 'rss', isActive: true },
   },
   {
     id: 'art9',
@@ -330,8 +361,220 @@ The system has been made open-source for researchers and media organizations to 
     tags: ['MIT', 'Deepfake', 'Computer Vision'],
     views: 11200,
     isBreaking: false,
+    isTrending: true,
     publishedAt: '2026-05-13T15:00:00Z',
-    source: { name: 'MIT News', reliabilityScore: 0.96, logo: '👁️', url: 'https://news.mit.edu' },
+    source: { id: 'src9', name: 'MIT News', reliabilityScore: 0.96, logo: '👁️', url: 'https://news.mit.edu', type: 'rss', isActive: true },
+  },
+  {
+    id: 'art10',
+    titleAr: 'أدوات ذكاء اصطناعي جديدة لتطوير البرمجيات تتحدى المبرمجين',
+    titleEn: 'New AI Development Tools Challenge Programmers',
+    summaryAr: '• إطلاق أدوات برمجية مدعومة بالذكاء الاصطناعي تكتب 80% من الكود البرمجي\n• الأدوات تدعم أكثر من 50 لغة برمجة مع تصحيح تلقائي للأخطاء\n• تفاعل إيجابي من المطورين مع زيادة إنتاجية بنسبة 300%',
+    summaryEn: '• AI-powered development tools that write 80% of code launched\n• Tools support 50+ programming languages with automatic error correction\n• Positive developer response with 300% productivity increase',
+    contentAr: `تم إطلاق مجموعة جديدة من أدوات تطوير البرمجيات المدعومة بالذكاء الاصطناعي التي تعيد تعريف مفهوم البرمجة.
+
+## كتابة كود ذكية
+
+الأدوات الجديدة قادرة على كتابة ما يصل إلى 80% من الكود البرمجي المطلوب، مع دعم لأكثر من 50 لغة برمجة مختلفة. كما تتضمن قدرات تصحيح تلقائي للأخطاء وتحسين الأداء.
+
+## زيادة الإنتاجية
+
+أفاد المطورون الذين استخدموا هذه الأدوات بزيادة في الإنتاجية تصل إلى 300%، مع تحسن كبير في جودة الكود المكتوب.`,
+    contentEn: `A new set of AI-powered software development tools has been launched that redefines the concept of programming.
+
+## Smart Code Writing
+
+The new tools can write up to 80% of the required code, supporting more than 50 different programming languages. They also include automatic error correction and performance optimization capabilities.
+
+## Productivity Boost
+
+Developers using these tools reported productivity increases of up to 300%, with significant improvements in code quality.`,
+    category: 'tools',
+    tags: ['AI Tools', 'Coding', 'Development'],
+    views: 18200,
+    isBreaking: false,
+    isTrending: true,
+    publishedAt: '2026-05-13T10:00:00Z',
+    source: { id: 'src10', name: 'DevOps Weekly', reliabilityScore: 0.89, logo: '💻', url: 'https://devops.com', type: 'rss', isActive: true },
+  },
+  {
+    id: 'art11',
+    titleAr: 'بحث جديد يكشف عن قدرات تفكير متقدمة في نماذج الذكاء الاصطناعي',
+    titleEn: 'New Research Reveals Advanced Reasoning in AI Models',
+    summaryAr: '• دراسة من ستانفورد تكشف عن قدرات تفكير سببية في أحدث نماذج الذكاء الاصطناعي\n• النماذج يمكنها الآن حل مشكلات تتطلب تفكيراً سببياً معقداً\n• النتائج تفتح آفاقاً جديدة في التشخيص الطبي والتحليل القانوني',
+    summaryEn: '• Stanford study reveals causal reasoning capabilities in latest AI models\n• Models can now solve problems requiring complex causal reasoning\n• Results open new horizons in medical diagnosis and legal analysis',
+    contentAr: `كشفت دراسة جديدة من جامعة ستانفورد عن قدرات تفكير سببية متقدمة في أحدث نماذج الذكاء الاصطناعي.
+
+## تفكير سببي
+
+أظهرت النماذج قدرة على حل مشكلات تتطلب تفكيراً سببياً معقداً، مما يتجاوز مجرد ربط الأنماط الإحصائية إلى فهم العلاقات السببية الفعلية.
+
+## تطبيقات واعدة
+
+تفتح هذه النتائج آفاقاً جديدة في مجالات التشخيص الطبي والتحليل القانوني والتخطيط الاستراتيجي.`,
+    contentEn: `A new study from Stanford University reveals advanced causal reasoning capabilities in the latest AI models.
+
+## Causal Reasoning
+
+The models demonstrated the ability to solve problems requiring complex causal reasoning, moving beyond mere statistical pattern matching to understanding actual causal relationships.
+
+## Promising Applications
+
+These results open new horizons in medical diagnosis, legal analysis, and strategic planning.`,
+    category: 'research',
+    tags: ['Stanford', 'Research', 'Reasoning'],
+    views: 6780,
+    isBreaking: false,
+    isTrending: false,
+    publishedAt: '2026-05-12T08:00:00Z',
+    source: { id: 'src11', name: 'Stanford AI Lab', reliabilityScore: 0.97, logo: '🎓', url: 'https://ai.stanford.edu', type: 'rss', isActive: true },
+  },
+  {
+    id: 'art12',
+    titleAr: 'شركة ناشئة تطور روبوت جراحي يتفوق على الجراحين البشر',
+    titleEn: 'Startup Develops Surgical Robot Outperforming Human Surgeons',
+    summaryAr: '• شركة ناشئة تطور روبوت جراحي بدقة تفوق الجراحين البشر بنسبة 40%\n• الروبوت أجرى أكثر من 500 عملية ناجحة في التجارب السريرية\n• موافقة إدارة الغذاء والدواء الأمريكية متوقعة خلال أشهر',
+    summaryEn: '• Startup develops surgical robot 40% more precise than human surgeons\n• Robot completed over 500 successful surgeries in clinical trials\n• FDA approval expected within months',
+    contentAr: `طورت شركة ناشئة روبوت جراحي يتفوق على الجراحين البشر في الدقة بنسبة 40%.
+
+## دقة استثنائية
+
+الروبوت الجديد قادر على إجراء عمليات جراحية دقيقة للغاية بدقة تفوق أفضل الجراحين البشر، مع تقليل معدل المضاعفات بنسبة 60%.
+
+## تجارب سريرية ناجحة
+
+أجرى الروبوت أكثر من 500 عملية ناجحة في التجارب السريرية، وتتوقع الشركة الحصول على موافقة إدارة الغذاء والدواء الأمريكية خلال الأشهر القادمة.`,
+    contentEn: `A startup has developed a surgical robot that outperforms human surgeons in precision by 40%.
+
+## Exceptional Precision
+
+The new robot can perform extremely delicate surgeries with accuracy surpassing the best human surgeons, reducing complication rates by 60%.
+
+## Successful Clinical Trials
+
+The robot has completed over 500 successful surgeries in clinical trials, and the company expects FDA approval within the coming months.`,
+    category: 'healthcare',
+    tags: ['Surgery', 'Robotics', 'Healthcare'],
+    views: 14500,
+    isBreaking: true,
+    isTrending: true,
+    publishedAt: '2026-05-12T14:00:00Z',
+    source: { id: 'src12', name: 'MedTech News', reliabilityScore: 0.91, logo: '⚕️', url: 'https://medtech.com', type: 'rss', isActive: true },
+  },
+]
+
+export const mockTools: MockTool[] = [
+  {
+    id: 'tool1',
+    name: 'ChatGPT Pro',
+    description: 'نموذج لغة متقدم للمحادثة وكتابة المحتوى',
+    category: 'llm',
+    rating: 4.8,
+    pricing: 'freemium',
+    url: 'https://chat.openai.com',
+    imageUrl: '',
+    features: ['محادثة ذكية', 'كتابة محتوى', 'تحليل بيانات', 'برمجة'],
+    isActive: true,
+    createdAt: '2026-01-15T00:00:00Z',
+    updatedAt: '2026-05-17T00:00:00Z',
+  },
+  {
+    id: 'tool2',
+    name: 'Midjourney V7',
+    description: 'أداة توليد صور فنية بالذكاء الاصطناعي',
+    category: 'generative',
+    rating: 4.7,
+    pricing: 'paid',
+    url: 'https://midjourney.com',
+    imageUrl: '',
+    features: ['توليد صور', 'أنماط فنية', 'دقة عالية', 'تحرير متقدم'],
+    isActive: true,
+    createdAt: '2026-02-01T00:00:00Z',
+    updatedAt: '2026-05-16T00:00:00Z',
+  },
+  {
+    id: 'tool3',
+    name: 'GitHub Copilot X',
+    description: 'مساعد برمجي ذكي يكمل الكود تلقائياً',
+    category: 'coding',
+    rating: 4.6,
+    pricing: 'paid',
+    url: 'https://github.com/features/copilot',
+    imageUrl: '',
+    features: ['إكمال كود', 'تصحيح أخطاء', 'شرح كود', 'اختبارات تلقائية'],
+    isActive: true,
+    createdAt: '2026-01-20T00:00:00Z',
+    updatedAt: '2026-05-15T00:00:00Z',
+  },
+  {
+    id: 'tool4',
+    name: 'Jasper AI',
+    description: 'أداة كتابة محتوى تسويقي بالذكاء الاصطناعي',
+    category: 'writing',
+    rating: 4.3,
+    pricing: 'paid',
+    url: 'https://jasper.ai',
+    imageUrl: '',
+    features: ['كتابة تسويقية', 'تحسين SEO', 'قوالب جاهزة', 'ترجمة'],
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-05-14T00:00:00Z',
+  },
+  {
+    id: 'tool5',
+    name: 'Runway ML',
+    description: 'منصة إبداعية لتوليد وتحرير الفيديو بالذكاء الاصطناعي',
+    category: 'generative',
+    rating: 4.5,
+    pricing: 'freemium',
+    url: 'https://runwayml.com',
+    imageUrl: '',
+    features: ['توليد فيديو', 'تحرير ذكي', 'إزالة خلفية', 'تأثيرات بصرية'],
+    isActive: true,
+    createdAt: '2026-02-15T00:00:00Z',
+    updatedAt: '2026-05-13T00:00:00Z',
+  },
+  {
+    id: 'tool6',
+    name: 'Notion AI',
+    description: 'مساعد ذكي لإدارة المهام والملاحظات',
+    category: 'productivity',
+    rating: 4.4,
+    pricing: 'freemium',
+    url: 'https://notion.so',
+    imageUrl: '',
+    features: ['تلخيص ملاحظات', 'كتابة محتوى', 'تنظيم مهام', 'قواعد بيانات'],
+    isActive: true,
+    createdAt: '2026-01-10T00:00:00Z',
+    updatedAt: '2026-05-12T00:00:00Z',
+  },
+  {
+    id: 'tool7',
+    name: 'Figma AI',
+    description: 'أداة تصميم واجهات مستخدم مدعومة بالذكاء الاصطناعي',
+    category: 'design',
+    rating: 4.6,
+    pricing: 'freemium',
+    url: 'https://figma.com',
+    imageUrl: '',
+    features: ['تصميم واجهات', 'توليد تخطيطات', 'اقتراح ألوان', 'تحويل لتخطيط'],
+    isActive: true,
+    createdAt: '2026-03-15T00:00:00Z',
+    updatedAt: '2026-05-11T00:00:00Z',
+  },
+  {
+    id: 'tool8',
+    name: 'Cursor AI',
+    description: 'محرر أكواد ذكي مدعوم بالذكاء الاصطناعي',
+    category: 'coding',
+    rating: 4.7,
+    pricing: 'freemium',
+    url: 'https://cursor.sh',
+    imageUrl: '',
+    features: ['تحرير ذكي', 'إكمال كود', 'إعادة هيكلة', 'شرح كود'],
+    isActive: true,
+    createdAt: '2026-04-01T00:00:00Z',
+    updatedAt: '2026-05-10T00:00:00Z',
   },
 ]
 
